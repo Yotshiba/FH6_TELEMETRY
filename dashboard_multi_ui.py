@@ -16,6 +16,7 @@ Usage:  python dashboard_multi_ui.py
 
 from __future__ import annotations
 
+import socket
 import sys
 
 import pyqtgraph as pg
@@ -26,6 +27,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -475,6 +477,62 @@ class LauncherWindow(QMainWindow):
         sep.setStyleSheet("color: #2a2a4a; margin: 4px 0 8px 0;")
         body.addWidget(sep)
 
+        # ── Connection input ──────────────────────────────────────────────
+        conn_lbl = QLabel("CONNECTION")
+        conn_lbl.setStyleSheet(
+            "color: #666688; font-size: 10px; font-weight: bold; letter-spacing: 1px;"
+        )
+        body.addWidget(conn_lbl)
+
+        addr_row = QHBoxLayout()
+        addr_row.setSpacing(6)
+
+        ip_lbl = QLabel("IP:")
+        ip_lbl.setStyleSheet("color: #888899; font-size: 12px;")
+        ip_lbl.setFixedWidth(20)
+        self._ip_edit = QLineEdit(HOST)
+        self._ip_edit.setPlaceholderText("e.g. 127.0.0.1")
+        self._ip_edit.setStyleSheet(
+            "QLineEdit { background: #111122; color: #ccccdd;"
+            "  border: 1px solid #2a2a4a; border-radius: 4px;"
+            "  padding: 4px 8px; font-size: 12px; font-family: monospace; }"
+            "QLineEdit:focus { border: 1px solid #44CCFF; }"
+        )
+
+        port_lbl = QLabel("Port:")
+        port_lbl.setStyleSheet("color: #888899; font-size: 12px;")
+        port_lbl.setFixedWidth(28)
+        self._port_edit = QLineEdit(str(PORT))
+        self._port_edit.setPlaceholderText("1024-65535")
+        self._port_edit.setFixedWidth(70)
+        self._port_edit.setStyleSheet(
+            "QLineEdit { background: #111122; color: #ccccdd;"
+            "  border: 1px solid #2a2a4a; border-radius: 4px;"
+            "  padding: 4px 8px; font-size: 12px; font-family: monospace; }"
+            "QLineEdit:focus { border: 1px solid #44CCFF; }"
+        )
+
+        addr_row.addWidget(ip_lbl)
+        addr_row.addWidget(self._ip_edit, stretch=1)
+        addr_row.addWidget(port_lbl)
+        addr_row.addWidget(self._port_edit)
+        body.addLayout(addr_row)
+
+        conn_btn_row = QHBoxLayout()
+        conn_btn_row.setSpacing(8)
+        test_btn    = self._accent_button("Test",    "#FFDD44")
+        connect_btn = self._accent_button("Connect", "#22BB44")
+        test_btn.clicked.connect(self._test_connection)
+        connect_btn.clicked.connect(self._connect)
+        conn_btn_row.addWidget(test_btn)
+        conn_btn_row.addWidget(connect_btn)
+        body.addLayout(conn_btn_row)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("color: #2a2a4a; margin: 4px 0 8px 0;")
+        body.addWidget(sep2)
+
         windows_lbl = QLabel("SELECT WINDOWS")
         windows_lbl.setStyleSheet(
             "color: #666688; font-size: 10px; font-weight: bold; letter-spacing: 1px;"
@@ -538,6 +596,18 @@ class LauncherWindow(QMainWindow):
     # ── Helpers ───────────────────────────────────────────────────────────
 
     @staticmethod
+    def _accent_button(text: str, accent: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setStyleSheet(
+            f"QPushButton {{ background: #0d1a2e; color: {accent};"
+            f"  border: 1px solid {accent}; border-radius: 5px;"
+            f"  padding: 6px 14px; font-size: 12px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: #1e1e3a; }}"
+            f"QPushButton:pressed {{ background: #0a1020; }}"
+        )
+        return btn
+
+    @staticmethod
     def _ctrl_button(text: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setStyleSheet(
@@ -559,6 +629,60 @@ class LauncherWindow(QMainWindow):
             btn.setChecked(False)
             win.hide()
 
+    # ── Connection helpers ────────────────────────────────────────────────
+
+    def _parse_inputs(self) -> tuple[str, int] | None:
+        """Validate and return (ip, port), or show an error and return None."""
+        ip = self._ip_edit.text().strip()
+        port_text = self._port_edit.text().strip()
+        try:
+            socket.inet_aton(ip)
+        except OSError:
+            self._conn_lbl.setText(f"⬤  Invalid IP address: '{ip}'")
+            self._conn_lbl.setStyleSheet("color: #FF4444;")
+            return None
+        try:
+            port = int(port_text)
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            self._conn_lbl.setText(f"⬤  Invalid port: '{port_text}' (must be 1–65535)")
+            self._conn_lbl.setStyleSheet("color: #FF4444;")
+            return None
+        return ip, port
+
+    def _test_connection(self) -> None:
+        """Try to bind a UDP socket to the given address and report result."""
+        parsed = self._parse_inputs()
+        if parsed is None:
+            return
+        ip, port = parsed
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.bind((ip, port))
+            self._conn_lbl.setText(f"⬤  OK — {ip}:{port} is available")
+            self._conn_lbl.setStyleSheet("color: #FFDD44;")
+        except OSError as exc:
+            self._conn_lbl.setText(f"⬤  Bind failed: {exc.strerror}")
+            self._conn_lbl.setStyleSheet("color: #FF4444;")
+        finally:
+            sock.close()
+
+    def _connect(self) -> None:
+        """Stop the current receiver and restart with the new IP/port."""
+        parsed = self._parse_inputs()
+        if parsed is None:
+            return
+        ip, port = parsed
+        self._receiver.stop()
+        self._receiver.wait(2000)
+        self._connected = False
+        self._receiver = TelemetryReceiver(ip, port)
+        self._receiver.data_ready.connect(self._on_telemetry)
+        self._receiver.start()
+        self._conn_lbl.setText(f"⬤  Listening on {ip}:{port} …")
+        self._conn_lbl.setStyleSheet("color: #888866;")
+
     # ── Telemetry slot ────────────────────────────────────────────────────
 
     def _on_telemetry(self, t: dict) -> None:
@@ -567,6 +691,8 @@ class LauncherWindow(QMainWindow):
         for wheel in WHEELS:
             key = f"TireTemp{wheel}"
             t[key] = (t[key] - 32.0) * 5.0 / 9.0
+            if t[key] <= 0.0:
+                t[key] = 0.1  # Avoid zero or negative temps messing with charts
 
         if not self._connected:
             self._connected = True

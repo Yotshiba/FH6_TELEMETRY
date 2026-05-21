@@ -18,8 +18,8 @@ import os
 
 dotenv.load_dotenv()
 
-HOST = os.getenv("HOST")
-PORT = int(os.getenv("PORT"))   
+HOST = os.getenv("HOST", "127.0.0.1")
+PORT = int(os.getenv("PORT", "20077"))
 
 # FH6 packet format — 324 bytes total (little-endian)
 # x = 1 byte trailing padding so struct size aligns to 4 bytes (323 data -> 324 with pad)

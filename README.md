@@ -33,11 +33,24 @@ Each category opens as an independent floating window that can be freely moved a
 
 ---
 
+## Enabling Data Out in Forza Horizon 6
+
+1. Launch **Forza Horizon 6** and open the **Pause Menu**
+2. Go to **Settings → HUD and Gameplay**
+3. Scroll down to the **Data Out** section
+4. Set **Data Out** to **On**
+5. Set **Data Out IP Address** to your PC's local IP address (use `127.0.0.1` if the dashboard is running on the same machine as the game)
+6. Set **Data Out IP Port** to `20077` (or match whatever port you enter in the Launcher)
+7. Set **Data Out Packet Format** to **Car Dash**
+
+> To find your local IP: open a command prompt and run `ipconfig` — look for the **IPv4 Address** under your active network adapter.
+
+---
+
 ## Requirements
 
 - Windows 10/11 64-bit
-- Forza Horizon 6 with **Data Out** enabled (Settings → HUD and gameplay → Data Out)  
-  Set the output IP to your PC's IP (or `127.0.0.1` for same machine) and port to `20077`
+- Forza Horizon 6 with **Data Out** enabled (see above)
 
 ---
 

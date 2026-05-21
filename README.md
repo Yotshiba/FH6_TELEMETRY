@@ -6,6 +6,16 @@ Each category opens as an independent floating window that can be freely moved a
 
 ---
 
+## Download
+
+| File | Size | Platform |
+|---|---|---|
+| [`FH6_Telemetry.exe`](https://github.com/Yotshiba/FH6_TELEMETRY/releases/latest) | 50.7 MB | Windows 64-bit |
+
+> No Python required. Download and run — Windows may show a SmartScreen prompt; click **More info → Run anyway**.
+
+---
+
 ## Features
 
 | Window | Contents |
@@ -25,13 +35,22 @@ Each category opens as an independent floating window that can be freely moved a
 
 ## Requirements
 
-- Python 3.11+
+- Windows 10/11 64-bit
 - Forza Horizon 6 with **Data Out** enabled (Settings → HUD and gameplay → Data Out)  
   Set the output IP to your PC's IP (or `127.0.0.1` for same machine) and port to `20077`
 
 ---
 
-## Installation
+## Quick Start (exe)
+
+1. Download `FH6_Telemetry.exe` from the [releases page](https://github.com/Yotshiba/FH6_TELEMETRY/releases/latest)
+2. Run it
+3. Enter your IP/port in the Launcher (default `127.0.0.1:20077`) and click **Connect**
+4. Toggle any category window and start a race in FH6 — data streams in live
+
+---
+
+## Build from Source
 
 ```bash
 # Clone the repo
@@ -40,25 +59,21 @@ cd FH6_TELEMETRY
 
 # Create and activate a virtual environment
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS / Linux
+venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
-```
 
----
-
-## Usage
-
-```bash
+# Run directly
 python dashboard_multi_ui.py
 ```
 
-1. The **Launcher** window opens.
-2. Click **Connect** (or leave defaults for `127.0.0.1:20077`).
-3. Toggle any category window with its card button.
-4. Start a race in FH6 — data streams in live.
+To rebuild the `.exe`:
+```bash
+pip install pyinstaller
+python -m PyInstaller --onefile --windowed --name FH6_Telemetry --collect-all pyqtgraph dashboard_multi_ui.py
+# Output: dist\FH6_Telemetry.exe
+```
 
 ---
 

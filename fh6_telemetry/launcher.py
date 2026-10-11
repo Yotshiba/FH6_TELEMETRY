@@ -25,10 +25,12 @@ from PyQt6.QtWidgets import (
 
 from .constants import PACKET_SIZE, WHEELS
 from .core.config import Config
+from .core.derive import display_channels
 from .core.diagnostics import install_excepthook, log_exception
 from .core.udp_source import UdpBindError, UdpSource
 from .receiver_qt import TelemetryReceiver
 from .style import _DARK_STYLE
+from .widgets import rolling_chart
 from .windows.car_lap_window import CarLapWindow
 from .windows.category_window import CategoryWindow
 from .windows.engine_window import EngineWindow
@@ -88,6 +90,7 @@ class LauncherWindow(QMainWindow):
     def __init__(self, config: Config | None = None) -> None:
         super().__init__()
         self._config = config if config is not None else Config.load()
+        rolling_chart.set_default_style(str(self._config["chart_style"]))
         self.setWindowTitle("FH6 Telemetry — Launcher")
         self.setFixedWidth(430)
         self.setStyleSheet(_DARK_STYLE)
@@ -383,6 +386,7 @@ class LauncherWindow(QMainWindow):
             t[key] = (t[key] - 32.0) * 5.0 / 9.0
             if t[key] <= 0.0:
                 t[key] = 0.1  # avoid zero/negative values skewing charts
+        t.update(display_channels(t))   # km/h, hp, %, … for charts (and later the web)
 
         if not self._connected:
             self._connected = True
@@ -415,7 +419,8 @@ class LauncherWindow(QMainWindow):
 
 
 def setup_pyqtgraph() -> None:
-    pg.setConfigOptions(antialias=True, foreground="#cccccc", background="#0d0d1a")
+    # Curves choose their own antialiasing (see widgets/rolling_chart.PEN_STYLES).
+    pg.setConfigOptions(antialias=False, foreground="#cccccc", background="#0d0d1a")
 
 
 def main() -> None:

@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..core.charts import CHARTS
 from ..style import _divider, _section_label
 from ..widgets.bar_indicator import BarIndicator
 from ..widgets.rolling_chart import RollingChart
@@ -58,14 +59,7 @@ class InputsTab(QWidget):
         left_layout.addWidget(self._steer_dir)
         left_layout.addStretch()
 
-        self._tb_chart = RollingChart(
-            "Throttle & Brake", "%",
-            [
-                ("Accel", "Throttle", "#22BB44", lambda v: v / 255.0 * 100.0),
-                ("Brake", "Brake",    "#DD2200", lambda v: v / 255.0 * 100.0),
-            ],
-            y_range=(0.0, 100.0),
-        )
+        self._tb_chart = RollingChart(CHARTS["inputs_throttle_brake"])
 
         split.addWidget(left_widget)
         split.addWidget(self._tb_chart)

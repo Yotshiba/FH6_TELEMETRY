@@ -7,7 +7,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 
-from ..constants import WHEEL_COLORS
+from ..core.charts import CHARTS
 from ..widgets.rolling_chart import RollingChart
 from ..widgets.tyre_panel_grid import TyrePanelGrid
 
@@ -24,16 +24,7 @@ class TyresTab(QWidget):
         split.setChildrenCollapsible(False)
 
         self._grid = TyrePanelGrid()
-        self._temp_chart = RollingChart(
-            "Tyre Temp", "°C",
-            [
-                ("TireTempFL", "FL", WHEEL_COLORS["FL"], None),
-                ("TireTempFR", "FR", WHEEL_COLORS["FR"], None),
-                ("TireTempRL", "RL", WHEEL_COLORS["RL"], None),
-                ("TireTempRR", "RR", WHEEL_COLORS["RR"], None),
-            ],
-            y_min=0.0,
-        )
+        self._temp_chart = RollingChart(CHARTS["tyre_temp"])
 
         split.addWidget(self._grid)
         split.addWidget(self._temp_chart)

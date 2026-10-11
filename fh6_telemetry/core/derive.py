@@ -66,3 +66,41 @@ def gear_label(code: int, previous: str | None = None) -> str:
     if label is not None:
         return label
     return previous if previous is not None else str(code)
+
+
+# ---------------------------------------------------------------------------
+# Display channels (units conversions, one definition for Qt charts and web)
+# ---------------------------------------------------------------------------
+
+KMH_PER_MS = 3.6
+MPH_PER_MS = 2.23694
+HP_PER_KW = 1.34102
+BAR_PER_PSI = 0.0689476
+G = 9.80665
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return lo if v < lo else hi if v > hi else v
+
+
+def display_channels(t: dict) -> dict[str, float]:
+    """Derived values in display units for one telemetry dict.
+
+    *t* is a parsed packet whose tyre temperatures are already in °C (the
+    launcher / hub converts them).  Returned keys never collide with raw field
+    names, so callers can simply ``t.update(display_channels(t))``.
+    """
+    speed = t.get("Speed", 0.0)
+    return {
+        "SpeedKmh": speed * KMH_PER_MS,
+        "SpeedMph": speed * MPH_PER_MS,
+        "PowerHp": t.get("Power", 0.0) / 1000.0 * HP_PER_KW,
+        "BoostBar": t.get("Boost", 0.0) * BAR_PER_PSI,
+        "FuelPct": t.get("Fuel", 0.0) * 100.0,
+        "AccelPct": t.get("Accel", 0) / 255.0 * 100.0,
+        "BrakePct": t.get("Brake", 0) / 255.0 * 100.0,
+        "ClutchPct": t.get("Clutch", 0) / 255.0 * 100.0,
+        "HandBrakePct": t.get("HandBrake", 0) / 255.0 * 100.0,
+        # raw -128 would give -100.8 %; the wire range is -127..127
+        "SteerPct": _clamp(t.get("Steer", 0) / 127.0 * 100.0, -100.0, 100.0),
+    }

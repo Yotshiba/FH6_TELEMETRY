@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..constants import GEAR_MAP
+from ..core.charts import CHARTS
 from ..widgets.rolling_chart import RollingChart
 
 
@@ -86,22 +87,8 @@ class EngineTab(QWidget):
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setChildrenCollapsible(False)
 
-        self._rpm_chart = RollingChart(
-            "RPM", "rpm",
-            [
-                ("CurrentEngineRpm", "RPM",     "#FFDD44", None),
-                ("EngineMaxRpm",     "Max RPM", "#FF4444", None),
-            ],
-            y_range=(0.0, 10000.0),
-        )
-        self._pt_chart = RollingChart(
-            "Power & Torque", "hp / Nm",
-            [
-                ("Power",  "Power (hp)",  "#44CCFF", lambda v: v / 1000.0 * 1.34102),
-                ("Torque", "Torque (Nm)", "#FF9900", None),
-            ],
-            y_min=0.0,
-        )
+        self._rpm_chart = RollingChart(CHARTS["engine_rpm"])
+        self._pt_chart = RollingChart(CHARTS["engine_power_torque"])
 
         split.addWidget(self._rpm_chart)
         split.addWidget(self._pt_chart)

@@ -23,6 +23,7 @@ _SCHEMA: dict[str, tuple[Any, Any]] = {
     "udp_port": (PORT, lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 65535),
     "refresh_hz": (20, lambda v: v in (10, 15, 20, 30, 60)),
     "low_impact": (None, lambda v: v is None or isinstance(v, bool)),  # None = auto
+    "chart_style": ("thin", lambda v: v in ("thin", "bold")),
     "web_enabled": (False, lambda v: isinstance(v, bool)),
     "web_port": (8077, lambda v: isinstance(v, int) and not isinstance(v, bool) and 1024 <= v <= 65535),
     "web_rate_hz": (30, lambda v: v in (15, 30, 60)),

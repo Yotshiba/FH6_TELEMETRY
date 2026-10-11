@@ -4,16 +4,8 @@ Visual style constants and shared UI factory helpers.
 
 from __future__ import annotations
 
-from typing import Callable
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QLabel
-
-# ---------------------------------------------------------------------------
-# Type alias used by RollingChart
-# ---------------------------------------------------------------------------
-
-LineSpec = tuple[str, str, str, Callable[[float], float] | None]
 
 # ---------------------------------------------------------------------------
 # Global dark stylesheet

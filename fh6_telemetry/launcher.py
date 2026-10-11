@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import socket
 import sys
+import time
 
 import pyqtgraph as pg
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -23,12 +25,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .constants import PACKET_SIZE, WHEELS
+from .constants import PACKET_SIZE
 from .core.config import Config
-from .core.derive import display_channels
 from .core.diagnostics import install_excepthook, log_exception
+from .core.hub import TelemetryHub
 from .core.udp_source import UdpBindError, UdpSource
-from .receiver_qt import TelemetryReceiver
 from .style import _DARK_STYLE
 from .widgets import rolling_chart
 from .windows.car_lap_window import CarLapWindow
@@ -82,6 +83,9 @@ _CATEGORIES: list[tuple[str, str, str, type[CategoryWindow]]] = [
         MotionWindow,
     ),
 ]
+
+
+_REFRESH_CHOICES = (10, 15, 20, 30, 60)
 
 
 class LauncherWindow(QMainWindow):
@@ -175,6 +179,30 @@ class LauncherWindow(QMainWindow):
         conn_btn_row.addWidget(connect_btn)
         body.addLayout(conn_btn_row)
 
+        # Display refresh rate (charts still record every packet)
+        rate_row = QHBoxLayout()
+        rate_row.setSpacing(6)
+        rate_lbl = QLabel("Refresh rate:")
+        rate_lbl.setStyleSheet("color: #888899; font-size: 12px;")
+        self._rate_combo = QComboBox()
+        self._rate_combo.setStyleSheet(
+            "QComboBox { background: #111122; color: #ccccdd;"
+            "  border: 1px solid #2a2a4a; border-radius: 4px;"
+            "  padding: 3px 8px; font-size: 12px; }"
+            "QComboBox QAbstractItemView { background: #111122; color: #ccccdd;"
+            "  selection-background-color: #1e1e3a; }"
+        )
+        for hz in _REFRESH_CHOICES:
+            self._rate_combo.addItem(
+                f"{hz} Hz" + ("  (highest CPU cost)" if hz >= 60 else ""), hz
+            )
+        current_hz = int(self._config["refresh_hz"])
+        self._rate_combo.setCurrentIndex(_REFRESH_CHOICES.index(current_hz))
+        self._rate_combo.currentIndexChanged.connect(self._on_rate_changed)
+        rate_row.addWidget(rate_lbl)
+        rate_row.addWidget(self._rate_combo, stretch=1)
+        body.addLayout(rate_row)
+
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
         sep2.setStyleSheet("color: #2a2a4a; margin: 4px 0 8px 0;")
@@ -226,19 +254,40 @@ class LauncherWindow(QMainWindow):
         self._conn_lbl.setStyleSheet("color: #888866;")
         self._ts_lbl = QLabel("")
         self._ts_lbl.setStyleSheet("color: #555566;")
+        self._cpu_lbl = QLabel("")
+        self._cpu_lbl.setStyleSheet("color: #555566;")
+        self._cpu_lbl.setToolTip(
+            "CPU used by this dashboard (share of one core) and the display rate"
+        )
         sb.addWidget(self._conn_lbl)
+        sb.addPermanentWidget(self._cpu_lbl)
         sb.addPermanentWidget(self._ts_lbl)
 
         self._connected = False
+        self._stale = False
+        self._last_status: tuple[str, str] | None = None
         self.adjustSize()
 
-        # UDP receiver (bind errors are shown, not raised)
-        self._receiver: TelemetryReceiver | None = None
+        # Telemetry hub (the UDP thread feeds it; the render timer reads it).
+        # Bind errors are shown in the status bar, not raised.
+        self._hub = TelemetryHub()
+        self._cursor = 0
         self._start_receiver(
             str(self._config["udp_host"]), int(self._config["udp_port"])
         )
 
-        # 1 Hz status poll: wrong packet size / silence after a connection
+        # Render timer: one tick drains all new frames and redraws what is on
+        # screen, instead of doing full UI work for every packet.
+        self._cost_ema = 0.0
+        self._interval_ms = 50
+        self._tick_timer = QTimer(self)     # CoarseTimer: jitter is irrelevant here
+        self._tick_timer.timeout.connect(self._on_tick)
+        self._set_refresh_hz(current_hz)
+        self._tick_timer.start()
+
+        # 1 Hz status poll: wrong packet size, silence, own CPU usage
+        self._tick_count = 0
+        self._cpu_prev = (time.process_time(), time.perf_counter(), 0)
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(1000)
         self._status_timer.timeout.connect(self._poll_status)
@@ -311,6 +360,9 @@ class LauncherWindow(QMainWindow):
         return ip, port
 
     def _set_status(self, text: str, colour: str) -> None:
+        if self._last_status == (text, colour):
+            return                      # setStyleSheet re-polishes: only when it changes
+        self._last_status = (text, colour)
         self._conn_lbl.setText(text)
         self._conn_lbl.setStyleSheet(f"color: {colour};")
 
@@ -320,8 +372,8 @@ class LauncherWindow(QMainWindow):
         if parsed is None:
             return
         ip, port = parsed
-        current = self._receiver.bound if self._receiver is not None else None
-        if current is not None and (ip, port) == (current[0], current[1]):
+        bound = self._hub.status().bound
+        if bound is not None and (ip, port) == (bound[0], bound[1]):
             self._set_status(f"⬤  OK — already listening on {ip}:{port}", "#22BB44")
             return
         probe = UdpSource(ip, port, lambda _data: None)
@@ -335,24 +387,25 @@ class LauncherWindow(QMainWindow):
             probe.stop()
 
     def _start_receiver(self, ip: str, port: int) -> bool:
-        """Stop the current receiver and listen on *ip*:*port*; show any error."""
-        if self._receiver is not None:
-            self._receiver.stop()
-            self._receiver = None
+        """(Re)start the hub on *ip*:*port*; show any error."""
         self._connected = False
-        receiver = TelemetryReceiver(ip, port)
-        receiver.data_ready.connect(self._on_telemetry)
+        self._stale = False
         try:
-            receiver.start()
+            base = self._hub.start(ip, port)
         except UdpBindError as exc:
             self._set_status(f"⬤  Cannot listen on {ip}:{port} — {exc}", "#FF4444")
             return False
-        self._receiver = receiver
+        # New source: read only its frames (cursor pinned at the session
+        # boundary, so nothing is missed and nothing of the old source shows)
+        # and start the charts afresh.
+        self._cursor = base
+        for win in self._windows:
+            win.reset_history()
         self._set_status(f"⬤  Listening on {ip}:{port} …", "#888866")
         return True
 
     def _connect(self) -> None:
-        """Stop the current receiver and restart it with the new IP/port."""
+        """Restart the hub with the new IP/port."""
         parsed = self._parse_inputs()
         if parsed is None:
             return
@@ -362,59 +415,103 @@ class LauncherWindow(QMainWindow):
             self._config.set("udp_port", port)
             self._config.save()
 
+    # ------------------------------------------------------------------
+    # Refresh rate
+    # ------------------------------------------------------------------
+
+    def _on_rate_changed(self, index: int) -> None:
+        hz = _REFRESH_CHOICES[index]
+        self._set_refresh_hz(hz)
+        self._config.set("refresh_hz", hz)
+        self._config.save()
+
+    def _set_refresh_hz(self, hz: int) -> None:
+        self._interval_ms = max(1, round(1000 / hz))
+        self._cost_ema = 0.0
+        self._tick_timer.setInterval(self._interval_ms)
+
+    # ------------------------------------------------------------------
+    # 1 Hz status poll
+    # ------------------------------------------------------------------
+
     def _poll_status(self) -> None:
-        """Explain silence: wrong packet size, or no packets yet."""
-        rx = self._receiver
-        if rx is None or self._connected:
-            return
-        if rx.packets == 0 and rx.bad_packets > 0:
-            self._set_status(
-                f"⬤  Receiving {rx.last_bad_len}-byte packets — expected "
-                f"{PACKET_SIZE}. Set Data Out Packet Format to “Car Dash”.",
-                "#FF9900",
+        """Explain silence, show the dashboard's own CPU use."""
+        now_cpu, now_wall, ticks = time.process_time(), time.perf_counter(), self._tick_count
+        st = self._hub.status()
+        d_wall = now_wall - self._cpu_prev[1]
+        if d_wall > 0:
+            cpu = 100.0 * (now_cpu - self._cpu_prev[0]) / d_wall
+            hz = (ticks - self._cpu_prev[2]) / d_wall     # measured, not the requested rate
+            self._cpu_lbl.setText(
+                f"CPU {cpu:.0f}%  ·  display {hz:.0f} Hz  ·  game {st.pps:.0f} pkt/s"
             )
+        self._cpu_prev = (now_cpu, now_wall, ticks)
 
-    # ------------------------------------------------------------------
-    # Telemetry slot
-    # ------------------------------------------------------------------
-
-    def _on_telemetry(self, t: dict) -> None:
-        # FH6 broadcasts tyre temps in Fahrenheit — convert to °C
-        t = dict(t)
-        for wheel in WHEELS:
-            key = f"TireTemp{wheel}"
-            t[key] = (t[key] - 32.0) * 5.0 / 9.0
-            if t[key] <= 0.0:
-                t[key] = 0.1  # avoid zero/negative values skewing charts
-        t.update(display_channels(t))   # km/h, hp, %, … for charts (and later the web)
-
+        if st.state != "listening":
+            return
         if not self._connected:
+            if st.packets == 0 and st.bad_packets > 0:
+                self._set_status(
+                    f"⬤  Receiving {st.last_bad_len}-byte packets — expected "
+                    f"{PACKET_SIZE}. Set Data Out Packet Format to “Car Dash”.",
+                    "#FF9900",
+                )
+        elif st.last_rx_age is not None and st.last_rx_age > 1.5:
+            if not self._stale:
+                self._stale = True
+                self._set_status("⬤  No signal — waiting for packets …", "#FFDD44")
+
+    # ------------------------------------------------------------------
+    # Render tick
+    # ------------------------------------------------------------------
+
+    def _on_tick(self) -> None:
+        hub = self._hub
+        seq, frames, _dropped = hub.frames_since(self._cursor)
+        self._cursor = seq
+        if not frames:
+            return
+        self._tick_count += 1
+        t0 = time.perf_counter()
+
+        if not self._connected or self._stale:
             self._connected = True
-            bound = self._receiver.bound if self._receiver is not None else None
+            self._stale = False
+            bound = hub.status().bound
             where = f"{bound[0]}:{bound[1]}" if bound else "?"
             self._set_status(
                 f"⬤  Connected  —  {where}  —  {PACKET_SIZE} bytes/packet", "#22BB44"
             )
 
-        self._ts_lbl.setText(f"TimestampMS: {t.get('TimestampMS', 0)}")
+        latest = frames[-1]
+        self._ts_lbl.setText(f"TimestampMS: {latest.get('TimestampMS', 0)}")
 
         for win in self._windows:
-            if win.isVisible():
-                try:
-                    win.update_data(t)
-                except Exception as exc:  # one bad window/frame must not kill the app
-                    log_exception(f"update {win.windowTitle()}", exc)
+            try:
+                win.feed(frames)                     # history: always, even if hidden
+                if win.is_on_screen():
+                    win.update_data(latest)
+                    win.refresh()
+            except Exception as exc:  # one bad window/frame must not kill the app
+                log_exception(f"update {win.windowTitle()}", exc)
+
+        # Governor: never spend more than ~half of the tick interval on this.
+        cost = time.perf_counter() - t0
+        self._cost_ema = cost if self._cost_ema == 0.0 else 0.9 * self._cost_ema + 0.1 * cost
+        wanted = max(self._interval_ms, min(1000, int(self._cost_ema * 2000) + 1))
+        if abs(wanted - self._tick_timer.interval()) >= 10:
+            self._tick_timer.setInterval(wanted)
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        self._tick_timer.stop()
         self._status_timer.stop()
+        self._hub.stop()
         for win in self._windows:
             win.force_close()
-        if self._receiver is not None:
-            self._receiver.stop()
         super().closeEvent(event)
 
 

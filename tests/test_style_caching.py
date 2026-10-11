@@ -114,12 +114,14 @@ def test_whole_launcher_is_style_quiet_for_steady_input(qapp, tmp_config, count_
         win.show()
         win._open_all()
         qapp.processEvents()
-        sim = Simulator("steady", 1)
-        t = parse_packet(sim.datagram(1.0))
-        win._on_telemetry(t)                            # settle first-time buckets
+        win._on_tick()                                  # adopt the hub session
+        pkt = Simulator("steady", 1).datagram(1.0)
+        win._hub.ingest(pkt)
+        win._on_tick()                                  # settle first-time buckets
         count_style.clear()
         for _ in range(100):
-            win._on_telemetry(t)
+            win._hub.ingest(pkt)
+            win._on_tick()
         assert count_style == []
     finally:
         win.close()

@@ -96,5 +96,3 @@ class InputsTab(QWidget):
             self._steer_state = state
             self._steer_dir.setStyleSheet(self._STEER_STYLES[state])
         self._steer_dir.setText(text)
-
-        self._tb_chart.append(t)

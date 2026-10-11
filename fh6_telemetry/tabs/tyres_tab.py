@@ -34,4 +34,3 @@ class TyresTab(QWidget):
 
     def update_data(self, t: dict) -> None:
         self._grid.update_data(t)
-        self._temp_chart.append(t)

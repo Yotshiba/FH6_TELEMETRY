@@ -164,6 +164,11 @@ def run_benchmark(args: argparse.Namespace) -> None:
     probe.wrap(pg.AxisItem, "generateDrawSpecs", "AxisItem.generateDrawSpecs")
     probe.wrap(pg.PlotCurveItem, "paint", "PlotCurveItem.paint")
     # Per-packet / per-tick handlers (names differ between phases)
+    try:                                   # Phase 4+: the UDP-thread ingest cost
+        from fh6_telemetry.core.hub import TelemetryHub
+        probe.wrap(TelemetryHub, "ingest", "hub.ingest")
+    except ImportError:
+        pass
     # ``poll`` drives the measurement phases.  It is called from the heartbeat
     # timer *and* from the handlers, because with the original design the GUI
     # thread is so saturated that Qt timers can starve for seconds.

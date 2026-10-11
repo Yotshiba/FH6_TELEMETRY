@@ -44,5 +44,3 @@ class MotionTab(QWidget):
 
     def update_data(self, t: dict) -> None:
         self._motion.update_data(t)
-        self._susp_chart.append(t)
-        self._speed_chart.append(t)

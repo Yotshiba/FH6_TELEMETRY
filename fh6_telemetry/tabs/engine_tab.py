@@ -113,5 +113,3 @@ class EngineTab(QWidget):
         self._boost_val.setText(f"{boost:.3f} bar")
         self._fuel_val.setText(f"{fuel:.1f}%")
         self._gear_val.setText(gear)
-        self._rpm_chart.append(t)
-        self._pt_chart.append(t)

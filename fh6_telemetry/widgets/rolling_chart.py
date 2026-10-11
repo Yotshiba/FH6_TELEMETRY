@@ -124,6 +124,16 @@ class RollingChart(pg.PlotWidget):
             row[i] = v
         self._ring.append(row)
 
+    def ingest_frames(self, frames: list[dict]) -> None:
+        """Buffer a batch of frames.
+
+        Frames with ``IsRaceOn == 0`` (menus / pause) are not plotted: they
+        carry zeros or frozen values that would drag the Y range around.
+        """
+        for t in frames:
+            if t.get("IsRaceOn", 1):
+                self.ingest(t)
+
     def reset(self) -> None:
         """Forget the history (e.g. after connecting to a different source)."""
         self._ring.clear()

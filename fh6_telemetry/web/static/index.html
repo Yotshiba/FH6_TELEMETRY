@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0d1a">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FH6 Telemetry">
+<title>FH6 Telemetry</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header id="top">
+  <div id="brand">FH6<span>TELEMETRY</span></div>
+  <nav id="tabs" role="tablist" aria-label="Views"></nav>
+  <div id="conn" class="conn conn-connecting" title="Connection">
+    <span id="conn-dot"></span><span id="conn-text">Connecting…</span>
+  </div>
+</header>
+<main id="views"></main>
+<noscript><p style="padding:2rem">This dashboard needs JavaScript.</p></noscript>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

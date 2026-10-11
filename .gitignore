@@ -7,4 +7,5 @@ venv/
 *.egg-info/
 dist/
 build/
-.claude/.pytest_cache/
+.claude/
+.pytest_cache/

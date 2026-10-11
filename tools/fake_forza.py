@@ -167,7 +167,7 @@ class Simulator:
             frac = seg - gi
             gear = gi + 2  # FH gear code: 2 -> "1"
             rpm = idle + (max_rpm - idle) * (0.45 + 0.55 * frac)
-            speed = rpm / max(_GEAR_RATIOS[gi], 0.5) / 60.0 * 1.9
+            speed = rpm * 0.0075 / max(_GEAR_RATIOS[gi], 0.5)   # m/s: ~18 in 1st .. ~75 in 6th
             throttle = 0.9 + 0.1 * math.sin(t * 3)
             brake = 0.0
         else:

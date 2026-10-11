@@ -1,0 +1,180 @@
+:root {
+  --bg: #0d0d1a;
+  --panel: #1a1a2e;
+  --panel-2: #111122;
+  --border: #2a2a4a;
+  --text: #dddddd;
+  --bright: #eeeeee;
+  --dim: #888899;
+  --dimmer: #666688;
+  --accent: #44ccff;
+  --green: #22bb44;
+  --amber: #ff9900;
+  --red: #dd2200;
+  --yellow: #ffdd44;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+body {
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+  padding: var(--safe-t) var(--safe-r) 0 var(--safe-l);
+}
+
+/* ---- header / tabs ------------------------------------------------------ */
+#top {
+  display: flex; align-items: center; gap: 12px; flex: none;
+  padding: 6px 12px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+}
+#brand { font: 700 15px var(--mono); letter-spacing: 3px; color: var(--accent); white-space: nowrap; }
+#brand span { color: var(--dimmer); font-size: 10px; margin-left: 6px; letter-spacing: 2px; }
+#tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+#tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: none; padding: 7px 12px; border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--dim); font: inherit; font-weight: 600; cursor: pointer;
+  min-height: 34px;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { background: var(--panel); border-color: var(--tab, var(--accent)); color: var(--tab, var(--accent)); }
+.conn { display: flex; align-items: center; gap: 6px; flex: none; font-size: 12px; color: var(--dim); white-space: nowrap; }
+#conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dimmer); }
+.conn-live #conn-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn-nosignal #conn-dot { background: var(--yellow); }
+.conn-connecting #conn-dot, .conn-reconnecting #conn-dot { background: var(--amber); animation: pulse 1s infinite; }
+.conn-paused #conn-dot { background: var(--dimmer); }
+@keyframes pulse { 50% { opacity: .35; } }
+
+/* ---- views --------------------------------------------------------------- */
+#views { flex: 1; min-height: 0; position: relative; }
+.view {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 12px calc(10px + var(--safe-b));
+  display: none; -webkit-overflow-scrolling: touch;
+}
+.view.active { display: block; }
+.grid {
+  display: grid; gap: 10px; align-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}
+.span-2 { grid-column: span 2; }
+@media (max-width: 720px) { .span-2 { grid-column: auto; } }
+
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; min-width: 0;
+}
+.card h3 {
+  margin: 0 0 6px; font-size: 10px; letter-spacing: 1.5px; color: var(--dimmer);
+  font-weight: 700; text-transform: uppercase;
+}
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; align-items: baseline; }
+.kv .k { color: #aaa; font-size: 12px; text-align: right; }
+.kv .v { font: 12px var(--mono); color: var(--bright); }
+.mono { font-family: var(--mono); }
+
+/* ---- big numbers ----------------------------------------------------------- */
+.hero { display: flex; align-items: center; justify-content: space-around; gap: 12px; }
+.hero .speed { text-align: center; }
+.hero .speed .n { font: 700 clamp(44px, 9vw, 84px)/1 var(--mono); color: var(--accent); }
+.hero .speed .u { color: var(--dimmer); font-size: 12px; }
+.hero .speed .m { color: #777; font: 13px var(--mono); }
+.gear {
+  min-width: 1.6em; text-align: center; padding: 4px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--panel-2); color: var(--yellow);
+  font: 700 clamp(38px, 8vw, 72px)/1.1 var(--mono);
+}
+.gear small { display: block; font: 600 10px system-ui; color: var(--dimmer); letter-spacing: 1px; }
+.banner {
+  text-align: center; font-weight: 700; padding: 6px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--panel); color: #664444;
+}
+.banner.on { color: var(--green); background: #0a2010; border-color: var(--green); }
+.banner.nosig { color: var(--yellow); }
+
+/* ---- bars -------------------------------------------------------------------- */
+.bars { display: grid; gap: 3px; }
+.bar { display: grid; grid-template-columns: 78px 1fr 52px; align-items: center; gap: 6px; }
+.bar .n { color: #aaa; font-size: 11px; text-align: right; }
+.bar .t { height: 14px; background: #1e1e1e; border: 1px solid #3a3a3a; border-radius: 3px; overflow: hidden; position: relative; }
+.bar .f { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--green); border-radius: 2px; }
+.bar .x { font: 11px var(--mono); color: var(--bright); text-align: right; }
+
+/* ---- stat strip (engine) ----------------------------------------------------------- */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; text-align: center; }
+.stat .n { font: 700 clamp(18px, 3vw, 26px) var(--mono); white-space: nowrap; }
+.stat .l { font-size: 10px; letter-spacing: 1px; color: var(--dim); }
+
+/* ---- tyres ---------------------------------------------------------------------------- */
+.tyres { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; }
+.tyre .hd { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.tyre .w { font: 700 18px system-ui; }
+.tyre .sp { flex: 1; }
+.badge { padding: 1px 6px; border-radius: 4px; font: 10px system-ui; background: #1e1e1e; color: #444; }
+.badge.rumble.on { background: #ff6600; color: #fff; font-weight: 700; }
+.badge.puddle.on { background: #0088ff; color: #fff; font-weight: 700; }
+.temp {
+  text-align: center; font: 700 clamp(22px, 5vw, 30px) var(--mono); padding: 6px 12px;
+  border-radius: 6px; margin-bottom: 8px; background: #1a6fb5; color: #fff;
+}
+
+/* ---- charts -------------------------------------------------------------------------------- */
+.chart { position: relative; min-height: 160px; height: 100%; }
+.chart canvas { width: 100%; height: 100%; display: block; }
+.card.chart-card { padding: 6px; display: flex; min-height: 200px; }
+.card.chart-card .chart { flex: 1; min-height: 180px; }
+.view.v-dash .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+
+.steer { text-align: center; font: 13px var(--mono); color: var(--dim); padding: 4px; }
+.steer.left { color: var(--accent); }
+.steer.right { color: var(--amber); }
+
+/* ---- landscape phones: be compact ----------------------------------------------------------- */
+@media (max-height: 480px) {
+  #top { padding: 3px 8px; }
+  .tab { padding: 4px 9px; min-height: 28px; }
+  .view { padding: 6px 8px; }
+  .card { padding: 6px 8px; }
+  .hero .speed .n { font-size: clamp(38px, 12vh, 64px); }
+  .gear { font-size: clamp(32px, 11vh, 56px); }
+  .card.chart-card { min-height: 130px; }
+  .card.chart-card .chart { min-height: 110px; }
+}
+/* ---- portrait phones: tab bar at the bottom ----------------------------------------------- */
+@media (max-width: 560px) and (orientation: portrait) {
+  body { flex-direction: column-reverse; }
+  #top { flex-wrap: wrap; border-bottom: 0; border-top: 1px solid var(--border); padding-bottom: calc(6px + var(--safe-b)); }
+  #brand { display: none; }
+  #tabs { order: 2; flex-basis: 100%; }
+  .conn { margin-left: auto; }
+  .view { padding-bottom: 10px; }
+}
+
+/* ---- landscape phone "dash": everything on ONE screen, no scrolling ------------------------------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .view.v-dash { padding: 6px 8px; overflow: hidden; }
+  .view.v-dash .grid {
+    height: 100%; gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .view.v-dash .card { padding: 5px 8px; overflow: hidden; min-height: 0; }
+  .view.v-dash .card h3 { margin-bottom: 3px; }
+  .view.v-dash .banner { padding: 1px 4px; font-size: 12px; }
+  .view.v-dash .hero { margin-top: 2px; }
+  .view.v-dash .hero .speed .n { font-size: clamp(30px, 14vh, 60px); }
+  .view.v-dash .hero .speed .u { display: none; }
+  .view.v-dash .hero .speed .m { font-size: 11px; }
+  .view.v-dash .gear { font-size: clamp(28px, 12vh, 54px); padding: 0 10px; }
+  .view.v-dash .gear small { display: none; }
+  .view.v-dash .tyres { gap: 4px; }
+  .view.v-dash .temp { font-size: clamp(14px, 5vh, 22px); padding: 2px 4px; margin: 0; }
+  .view.v-dash .bar { grid-template-columns: 56px 1fr 44px; }
+  .view.v-dash .steer { padding: 0; font-size: 11px; }
+  .view.v-dash .card.chart-card { padding: 3px; min-height: 0; }
+  .view.v-dash .card.chart-card .chart { min-height: 0; }
+}

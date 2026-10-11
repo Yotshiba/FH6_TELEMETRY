@@ -19,6 +19,10 @@ pause      like ``fluct`` but alternating 6 s racing / 3 s paused (IsRaceOn=0,
 nan        like ``fluct`` with occasional NaN / inf in float fields
 carchange  like ``fluct`` but the car (max RPM, class, PI …) changes every 10 s
 short      like ``fluct`` but every ~20th datagram is truncated (232 / 311 bytes)
+showcase   a coherent, endless session for demoing the web UI: a drag-strip run
+           (0-100 / 0-200 / quarter mile / 60-0 braking), then laps of a closed
+           circuit with car-space velocity, drift corners, a jump (airtime +
+           hard landing), load transfer in the suspension and heating tyres
 
 Packets are built straight from ``fh6_telemetry.constants`` so they stay in
 sync with the parser.  Types are respected (B = 0-255, b = -128..127, …).
@@ -43,7 +47,7 @@ if str(_ROOT) not in sys.path:
 
 from fh6_telemetry.constants import FIELDS, PACKET_FORMAT, PACKET_SIZE  # noqa: E402
 
-SCENARIOS = ("steady", "fluct", "pause", "nan", "carchange", "short")
+SCENARIOS = ("steady", "fluct", "pause", "nan", "carchange", "short", "showcase")
 
 REC_MAGIC = b"FH6REC1\n"
 _REC_HDR = struct.Struct("<Id")  # payload length, monotonic seconds
@@ -117,6 +121,7 @@ class Simulator:
             raise ValueError(f"unknown scenario {scenario!r}")
         self.scenario = scenario
         self.rng = random.Random(seed)
+        self._show = ShowcaseCar(seed) if scenario == "showcase" else None
         self.tire_f = [170.0, 172.0, 168.0, 171.0]
         self.car = {"ordinal": 1234, "max_rpm": 8500.0, "klass": 3, "pi": 712,
                     "drive": 2, "cyl": 6, "group": 0}
@@ -134,6 +139,8 @@ class Simulator:
         """Field values at simulated time *t* (seconds)."""
         self._n += 1
         sc = self.scenario
+        if self._show is not None:
+            return self._show.values(t)
 
         # Pause scenario: 6 s racing, 3 s paused
         if sc == "pause" and (t % 9.0) >= 6.0:
@@ -276,6 +283,324 @@ class Simulator:
         if self.scenario == "short" and self._n % 20 == 0:
             return data[: self.rng.choice([232, 311])]
         return data
+
+
+# ---------------------------------------------------------------------------
+# Showcase: a coherent, endless session
+# ---------------------------------------------------------------------------
+
+_G = 9.80665
+_RATIOS = (3.6, 2.4, 1.75, 1.35, 1.05, 0.85)     # speed = rpm * 0.0075 / ratio
+_K_SPEED = 0.0075
+
+
+class _Track:
+    """A closed circuit: centreline sampled every ~2 m with heading and curvature."""
+
+    # control points (x, z) in metres, +Z = north; Catmull-Rom closed loop
+    POINTS = [(0, 0), (0, 260), (50, 420), (170, 500), (330, 500), (420, 430),
+              (430, 300), (350, 230), (250, 250), (200, 170), (270, 60),
+              (200, -70), (70, -120), (-60, -70)]
+
+    def __init__(self, origin=(-900.0, 3700.0)) -> None:
+        ox, oz = origin
+        pts = [(x + ox, z + oz) for x, z in self.POINTS]
+        dense: list[tuple[float, float]] = []
+        n = len(pts)
+        for i in range(n):
+            p0, p1, p2, p3 = pts[(i - 1) % n], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
+            for k in range(40):
+                u = k / 40.0
+                u2, u3 = u * u, u * u * u
+                dense.append(tuple(
+                    0.5 * ((2 * p1[c]) + (-p0[c] + p2[c]) * u
+                           + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * u2
+                           + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * u3)
+                    for c in (0, 1)))
+        nd = len(dense)
+        seg = [math.hypot(dense[(i + 1) % nd][0] - dense[i][0],
+                          dense[(i + 1) % nd][1] - dense[i][1]) for i in range(nd)]
+        total = sum(seg)
+        self.ds = 2.0
+        m = int(total / self.ds)
+        self.n = m
+        self.length = m * self.ds
+        xs, zs = [], []
+        acc, j = 0.0, 0
+        for i in range(m):
+            target = i * total / m
+            while acc + seg[j] < target:
+                acc += seg[j]
+                j = (j + 1) % nd
+            f = (target - acc) / seg[j] if seg[j] else 0.0
+            a, b = dense[j], dense[(j + 1) % nd]
+            xs.append(a[0] + (b[0] - a[0]) * f)
+            zs.append(a[1] + (b[1] - a[1]) * f)
+        self.xs, self.zs = xs, zs
+        # heading (0 = +Z, increases toward +X), unwrapped, and smoothed curvature
+        th = [math.atan2(xs[(i + 1) % m] - xs[i], zs[(i + 1) % m] - zs[i]) for i in range(m)]
+        for i in range(1, m):
+            while th[i] - th[i - 1] > math.pi:
+                th[i] -= 2 * math.pi
+            while th[i] - th[i - 1] < -math.pi:
+                th[i] += 2 * math.pi
+        self.th = th
+        # the unwrapped heading turns by exactly one full revolution over the loop
+        turn = 2 * math.pi * round((th[-1] - th[0]) / (2 * math.pi))
+        raw = []
+        for i in range(m):
+            nxt = th[i + 1] if i + 1 < m else th[0] + turn
+            prv = th[i - 1] if i > 0 else th[m - 1] - turn
+            raw.append((nxt - prv) / (2 * self.ds))
+        w = 6
+        self.kappa = [sum(raw[(i + k) % m] for k in range(-w, w + 1)) / (2 * w + 1) for i in range(m)]
+        # speed profile: lateral-grip limit, then braking / acceleration limits
+        vmax, alat, abrake, aacc = 72.0, 13.5, 12.0, 8.0
+        prof = [min(vmax, math.sqrt(alat / max(abs(k), 1e-4))) for k in self.kappa]
+        for _ in range(2):
+            for i in range(m - 1, -1, -1):
+                prof[i] = min(prof[i], math.sqrt(prof[(i + 1) % m] ** 2 + 2 * abrake * self.ds))
+            for i in range(m):
+                prof[(i + 1) % m] = min(prof[(i + 1) % m], math.sqrt(prof[i] ** 2 + 2 * aacc * self.ds))
+        self.profile = prof
+
+    def lerp(self, arr, s, angular=False):
+        i = int(s / self.ds) % self.n
+        f = (s / self.ds) - int(s / self.ds)
+        a, b = arr[i], arr[(i + 1) % self.n]
+        if angular and (i + 1) % self.n == 0:
+            b += 2 * math.pi * round((a - b) / (2 * math.pi))
+        return a + (b - a) * f
+
+
+class ShowcaseCar:
+    """Deterministic demo session: drag run -> braking test -> N laps -> repeat."""
+
+    LAPS = 3
+    IDLE_S = 3.0
+
+    def __init__(self, seed: int = 1) -> None:
+        self.rng = random.Random(seed)
+        self.track = _Track()
+        self.last_t = None
+        self.phase = "idle"
+        self.phase_t = 0.0
+        self.v = 0.0
+        self.s = 0.0
+        self.dist = 0.0              # drag-strip distance
+        self.odometer = 0.0
+        self.gi = 0
+        self.shift_cut = 0.0
+        self.lap = 0
+        self.lap_t = 0.0
+        self.best_lap = 0.0
+        self.last_lap = 0.0
+        self.laps_done = 0
+        self.delta = 0.0             # smoothed oversteer angle (rad)
+        self.air_start = None
+        self.landed_at = -9.0
+        self.jump_s = 0.62 * self.track.length
+        self._prev_s = 0.0
+        self.tire_f = [130.0] * 4
+        self.steer_f = 0.0
+        self.yaw = 0.0
+        self.race_time = 0.0
+
+    # -- helpers -------------------------------------------------------------
+    def _gear_rpm(self, v: float, throttle: float, braking: bool):
+        if v < 1.0:
+            self.gi = 0
+            return 0, 900.0 + 5200.0 * throttle
+        gi = self.gi
+        rpm = v * _RATIOS[gi] / _K_SPEED
+        while rpm > 8300 and gi < len(_RATIOS) - 1:
+            gi += 1
+            self.shift_cut = 0.14
+            rpm = v * _RATIOS[gi] / _K_SPEED
+        while rpm < 3600 and gi > 0 and (braking or rpm < 2800):
+            gi -= 1
+            rpm = v * _RATIOS[gi] / _K_SPEED
+        self.gi = gi
+        return gi, min(8500.0, max(900.0, rpm))
+
+    def values(self, t: float) -> dict:
+        dt = 0.0 if self.last_t is None else min(0.1, max(0.0, t - self.last_t))
+        self.last_t = t
+        self.race_time += dt
+        self.phase_t += dt
+        tr = self.track
+        throttle = brake = 0.0
+        steer = 0.0
+        lat_g = long_g = 0.0
+        vx = vy = 0.0
+        pitch = 0.0
+        slip_ratio = 0.0
+        air = False
+        rumble = 0
+
+        if self.phase in ("idle", "idle2"):
+            self.v = 0.0
+            if self.phase_t > self.IDLE_S:
+                nxt = "drag" if self.phase == "idle" else "lap"
+                self.phase, self.phase_t = nxt, 0.0
+                if nxt == "lap":                              # teleport to the circuit start
+                    self.s, self.v, self.laps_done, self.lap, self.lap_t = 0.0, 18.0, 0, 1, 0.0
+                    self._prev_s = 0.0
+                    self.gi = 2
+                else:
+                    self.dist = 0.0
+        elif self.phase == "drag":
+            throttle = 1.0
+            a = 11.5 * (1.0 - (self.v / 83.0) ** 1.6)
+            if self.shift_cut > 0:
+                a *= 0.2
+                self.shift_cut -= dt
+            slip_ratio = 0.35 * math.exp(-self.phase_t / 1.2)
+            a *= 1.0 - 0.3 * slip_ratio
+            self.v = min(83.0, self.v + a * dt)
+            self.dist += self.v * dt
+            long_g = a / _G
+            if self.phase_t > 19.0:
+                self.phase, self.phase_t = "brake", 0.0
+        elif self.phase == "brake":
+            brake = 1.0
+            a = -11.5
+            self.v = max(0.0, self.v + a * dt)
+            self.dist += self.v * dt
+            long_g = a / _G
+            if self.v <= 0.0 and self.phase_t > 0.5:
+                self.phase, self.phase_t = "idle2", 0.0
+        else:  # lap
+            # look a little ahead so braking starts on time (the profile already
+            # respects the braking limit, a lagging controller would overshoot corners)
+            target = min(tr.lerp(tr.profile, self.s),
+                         tr.lerp(tr.profile, self.s + self.v * 0.25),
+                         tr.lerp(tr.profile, self.s + self.v * 0.5))
+            a = max(-14.0, min(8.0, (target - self.v) / 0.1))
+            self.v = max(8.0, self.v + a * dt)
+            if self.shift_cut > 0:
+                self.shift_cut -= dt
+            self.s += self.v * dt
+            if self.s >= tr.length:
+                self.s -= tr.length
+                self._prev_s = self.s - self.v * dt
+                self.laps_done += 1
+                self.last_lap = self.lap_t
+                if self.best_lap == 0.0 or self.lap_t < self.best_lap:
+                    self.best_lap = self.lap_t
+                self.lap += 1
+                self.lap_t = 0.0
+                if self.laps_done >= self.LAPS:
+                    self.phase, self.phase_t = "idle", 0.0
+                    self.v, self.lap, self.dist = 0.0, 0, 0.0
+            self.lap_t += dt
+            kappa = tr.lerp(tr.kappa, self.s)
+            throttle = 1.0 if a > 0.5 else (0.25 if a > -1.5 else 0.0)
+            brake = min(1.0, max(0.0, -a / 12.0)) if a < -1.5 else 0.0
+            lat_g = self.v * self.v * kappa / _G
+            long_g = a / _G
+            steer = max(-1.0, min(1.0, kappa / 0.025))
+            # drift zones: oversteer through the tight corners
+            want = math.copysign(min(0.55, max(0.0, (abs(kappa) - 0.010) * 45.0)), kappa)
+            self.delta += (want - self.delta) * min(1.0, dt / 0.25)
+            vx = -self.v * math.sin(self.delta)
+            # the jump
+            if self.air_start is None and self._prev_s < self.jump_s <= self.s:
+                self.air_start = t
+            if self.air_start is not None:
+                tau = t - self.air_start
+                if tau <= 1.1:
+                    air = True
+                    vy = 5.4 * (1.0 - 2.0 * tau / 1.1)
+                    pitch = 0.12 * (1.0 - 2.0 * tau / 1.1)
+                else:
+                    self.air_start, self.landed_at = None, t
+            self._prev_s = self.s
+            if int(self.s / 60) % 5 == 2:                     # curbs
+                rumble = 1
+        self.odometer += self.v * dt
+
+        gear_i, rpm = self._gear_rpm(self.v, throttle, brake > 0.1)
+        v = self.v
+        # --- pose ---------------------------------------------------------------
+        if self.phase == "lap":
+            px = tr.lerp(tr.xs, self.s)
+            pz = tr.lerp(tr.zs, self.s)
+            heading = tr.lerp(tr.th, self.s, angular=True)
+            yaw_rate = tr.lerp(tr.kappa, self.s) * v
+            self.yaw = heading + self.delta
+        else:
+            px, pz = -1500.0, 3000.0 + self.dist              # a straight, heading north
+            yaw_rate = 0.0
+            self.yaw = 0.0
+        yaw = (self.yaw + math.pi) % (2 * math.pi) - math.pi
+        pos_y = 40.0
+        if self.air_start is not None:
+            tau = t - self.air_start
+            pos_y += 5.4 * tau - 4.9 * tau * tau
+        # --- suspension: base 0.45, load transfer, jump -----------------------------------
+        since_land = t - self.landed_at
+        slam = max(0.0, 1.0 - since_land / 0.45) if 0 <= since_land < 0.45 else 0.0
+        susp = {}
+        for w, (side, front) in {"FL": (-1, 1), "FR": (1, 1), "RL": (-1, -1), "RR": (1, -1)}.items():
+            base = 0.45 + 0.20 * (-side) * lat_g + 0.06 * long_g * front
+            base += 0.015 * math.sin(t * 9 + side + front)
+            if air:
+                base = self.rng.uniform(0, 0.012)
+            base += 0.55 * slam
+            susp[w] = max(0.0, min(1.0, base))
+        # --- tyres ------------------------------------------------------------------
+        drift = abs(self.delta)
+        slip_angle = {w: 0.08 * lat_g * (1.0 if w[0] == "F" else 0.9)
+                      + drift * (1.6 if w[0] == "R" else 0.5) for w in _WHEELS}
+        for i, w in enumerate(_WHEELS):
+            heat = abs(lat_g) * 0.9 + abs(slip_angle[w]) * 6 + slip_ratio * 5 + brake * 0.8
+            self.tire_f[i] += (heat * 9.0 - (self.tire_f[i] - 125.0) * 0.012) * dt
+        torque = 0.0 if (v < 1 and throttle == 0) else (
+            380.0 * (0.55 + 0.45 * math.sin(math.pi * min(1.0, rpm / 9000.0)))
+        ) * (1.0 if throttle > 0 else -0.15)
+        power = max(0.0, torque * rpm * 2 * math.pi / 60.0)
+        self.steer_f += (steer - self.steer_f) * min(1.0, dt / 0.08)
+
+        out: dict = {
+            "IsRaceOn": 0 if (self.phase in ("idle", "idle2") and self.phase_t < 0.4) else 1,
+            "TimestampMS": int(t * 1000) & 0xFFFFFFFF,
+            "EngineMaxRpm": 8500.0, "EngineIdleRpm": 900.0, "CurrentEngineRpm": rpm,
+            "AccelerationX": lat_g * _G + self.rng.uniform(-0.15, 0.15),
+            "AccelerationY": (-_G if air else 0.0) + 28.0 * slam + self.rng.uniform(-0.2, 0.2),
+            "AccelerationZ": long_g * _G + self.rng.uniform(-0.15, 0.15),
+            "VelocityX": vx, "VelocityY": vy, "VelocityZ": math.sqrt(max(0.0, v * v - vx * vx)),
+            "AngularVelocityX": 0.0, "AngularVelocityY": yaw_rate, "AngularVelocityZ": 0.0,
+            "Yaw": yaw, "Pitch": pitch - 0.01 * long_g, "Roll": 0.02 * lat_g,
+            "CarOrdinal": 3141, "CarClass": 4, "CarPerformanceIndex": 811, "DrivetrainType": 2,
+            "NumCylinders": 6, "CarGroup": 0,
+            "SmashableVelDiff": 0.0, "SmashableMass": 0.0,
+            "PositionX": px, "PositionY": pos_y, "PositionZ": pz,
+            "Speed": v, "Power": power, "Torque": torque,
+            "Boost": 18.0 * throttle * min(1.0, rpm / 6500.0) - (2.0 if throttle == 0 else 0.0),
+            "Fuel": max(0.0, 1.0 - self.odometer * 2.5e-5),
+            "DistanceTraveled": self.odometer,
+            "BestLap": self.best_lap, "LastLap": self.last_lap,
+            "CurrentLap": self.lap_t if self.phase == "lap" else 0.0,
+            "CurrentRaceTime": self.race_time,
+            "LapNumber": self.lap if self.phase == "lap" else 0, "RacePosition": 3,
+            "Accel": throttle * 255, "Brake": brake * 255, "Clutch": 0, "HandBrake": 0,
+            "Gear": gear_i + 2 if v >= 1.0 else 1,
+            "Steer": 127 * self.steer_f,
+            "NormalizedDrivingLine": 0, "NormalizedAIBrakeDifference": 0,
+        }
+        for i, w in enumerate(_WHEELS):
+            out[f"SuspNorm{w}"] = susp[w]
+            out[f"TireSlipRatio{w}"] = slip_ratio + (0.05 * brake if w[0] == "F" else 0.0)
+            out[f"WheelRotSpeed{w}"] = v / 0.33 * (1.0 + slip_ratio)
+            out[f"WheelOnRumble{w}"] = rumble if w in ("FR", "RR") else 0
+            out[f"WheelInPuddle{w}"] = 0
+            out[f"SurfaceRumble{w}"] = 0.4 * rumble
+            out[f"TireSlipAngle{w}"] = slip_angle[w]
+            out[f"TireCombinedSlip{w}"] = math.hypot(slip_angle[w], slip_ratio) * 1.4
+            out[f"SuspTravelM{w}"] = (susp[w] - 0.45) * 0.1
+            out[f"TireTemp{w}"] = self.tire_f[i]
+        return out
 
 
 # ---------------------------------------------------------------------------

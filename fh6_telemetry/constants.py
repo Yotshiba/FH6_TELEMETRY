@@ -86,6 +86,12 @@ CAR_CLASS: dict[int, str] = {
     0: "D", 1: "C", 2: "B", 3: "A", 4: "S1", 5: "S2", 6: "X", 7: "X",
 }
 
+# Forza-style class badge colours (by CAR_CLASS label)
+CLASS_COLORS: dict[str, str] = {
+    "D": "#3DB1E6", "C": "#F2C230", "B": "#F28C1E", "A": "#E3412F",
+    "S1": "#9B4DCA", "S2": "#3D6FE0", "X": "#43B04A",
+}
+
 DRIVETRAIN: dict[int, str] = {0: "FWD", 1: "RWD", 2: "AWD"}
 
 GEAR_MAP: dict[int, str] = {

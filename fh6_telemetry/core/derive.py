@@ -83,6 +83,18 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return lo if v < lo else hi if v > hi else v
 
 
+def sideslip_deg(vx: float, vz: float, speed: float) -> float:
+    """Angle between the car's nose and its direction of travel (degrees).
+
+    ``VelocityX/Z`` are in the car's own frame (X right, Z forward), so this is
+    ``atan2(vx, vz)``: 0 when driving straight, large and signed when sliding.
+    Meaningless at a standstill or in reverse, where it reads 0.
+    """
+    if speed < 3.0 or vz <= 0.0:
+        return 0.0
+    return math.degrees(math.atan2(vx, vz))
+
+
 def display_channels(t: dict) -> dict[str, float]:
     """Derived values in display units for one telemetry dict.
 
@@ -103,4 +115,9 @@ def display_channels(t: dict) -> dict[str, float]:
         "HandBrakePct": t.get("HandBrake", 0) / 255.0 * 100.0,
         # raw -128 would give -100.8 %; the wire range is -127..127
         "SteerPct": _clamp(t.get("Steer", 0) / 127.0 * 100.0, -100.0, 100.0),
+        # car-space accelerations in g (X right, Z forward) and the drift angle
+        "AccelGX": t.get("AccelerationX", 0.0) / G,
+        "AccelGY": t.get("AccelerationY", 0.0) / G,
+        "AccelGZ": t.get("AccelerationZ", 0.0) / G,
+        "SideslipDeg": sideslip_deg(t.get("VelocityX", 0.0), t.get("VelocityZ", 0.0), speed),
     }

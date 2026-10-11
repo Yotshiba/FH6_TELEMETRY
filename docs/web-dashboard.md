@@ -94,7 +94,8 @@ installable app**, and clipboard access. The dashboard itself is unaffected.
   auto-reconnecting). Every packet is delivered (full chart fidelity), batched about 30
   times per second.
 * A phone that locks its screen or loses Wi-Fi reconnects and **resumes** from where it
-  stopped. The page also reloads cleanly when you switch to another game session.
+  stopped. If you reconnect the dashboard to a different telemetry source, open pages resync
+  automatically.
 * Nothing is downloaded from the internet: the page, script and styles are served by the app
   itself, so it works on a LAN without internet access.
 * Protocol details: `fh6_telemetry/web/protocol.py`.

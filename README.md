@@ -1,16 +1,17 @@
 # FH6 Telemetry Dashboard
 
-A multi-window real-time telemetry dashboard for **Forza Horizon 6**, built with Python, PyQt6, and pyqtgraph.
+A real-time telemetry dashboard for **Forza Horizon 6**, built with Python, PyQt6, and pyqtgraph — on your desktop **and in any browser on your local network** (phone, tablet, another PC).
 
-Each category opens as an independent floating window that can be freely moved and resized. The launcher lets you toggle any combination of windows.
+Each category opens as an independent floating window that can be freely moved and resized. The launcher lets you toggle any combination of windows, and can serve the same data as a web page.
 
 ---
 
 ## Download
 
-| File | Size | Platform |
+| File | Platform | What it is |
 |---|---|---|
-| [`FH6_Telemetry.exe`](https://github.com/Yotshiba/FH6_TELEMETRY/releases/latest) | 50.7 MB | Windows 64-bit |
+| [`FH6_Telemetry.exe`](https://github.com/Yotshiba/FH6_TELEMETRY/releases/latest) | Windows 64-bit | the desktop dashboard (+ optional web dashboard) |
+| `FH6_Telemetry_Headless.exe` | Windows 64-bit | web dashboard only — no windows, a few MB, ~1–2 % of one CPU core |
 
 > No Python required. Download and run — Windows may show a SmartScreen prompt; click **More info → Run anyway**.
 
@@ -27,9 +28,12 @@ Each category opens as an independent floating window that can be freely moved a
 | **Inputs** | Throttle, brake, clutch, handbrake, steer bars + Throttle/Brake chart |
 | **Motion** | Speed/gear display + velocity, acceleration, orientation, position data + suspension & speed charts |
 
+- **Web dashboard** — the same six categories in a browser, plus a compact **Dash** view that fits a landscape phone on one screen ([guide](docs/web-dashboard.md))
+- **Light on your game** — the display refreshes on a timer (10–60 Hz, default 20) instead of per packet; hidden/minimised windows cost almost nothing; optional *low-impact mode* lowers the dashboard's priority
+- **Stable charts** — the Y axis only changes when it has to (no constant re-scaling when values fluctuate)
 - **Unit conversions**: boost in bar, power in hp, speed in km/h + mph, tyre temps in °C (converted from FH6's Fahrenheit broadcast)
 - **Dark theme** throughout
-- Configurable UDP IP and port from the launcher UI
+- Configurable UDP IP and port (remembered between runs)
 
 ---
 
@@ -63,6 +67,30 @@ Each category opens as an independent floating window that can be freely moved a
 
 ---
 
+## Web dashboard (phone / tablet / another PC)
+
+In the launcher tick **Web dashboard**. It shows an address such as `http://192.168.1.101:8077/` — open it in a browser on any device on the same Wi-Fi. It is **off by default** and only answers devices on your local network.
+
+For the lowest impact on the gaming PC, run **headless** (no windows at all):
+
+```bash
+FH6_Telemetry_Headless.exe          # or: python -m fh6_telemetry --headless
+```
+
+If the page doesn't load, the cause is almost always the Windows firewall profile or router client-isolation — see [docs/web-dashboard.md](docs/web-dashboard.md) (firewall rule, troubleshooting, limitations).
+
+---
+
+## Keeping the dashboard from costing you FPS
+
+* Prefer the **web dashboard on a phone/tablet** (or headless mode) and close the desktop windows: nothing is painted on the gaming PC.
+* Lower the **Refresh rate** in the launcher (10–20 Hz is plenty); charts still record every packet.
+* **Low-impact mode** (on by default on Windows 11) asks Windows to schedule the dashboard behind your game.
+* Never set the windows "always on top" over a full-screen game, and consider putting them on a second monitor.
+* The launcher's status bar shows the dashboard's own CPU use. To measure the real FPS effect, see [docs/perf-measurement.md](docs/perf-measurement.md).
+
+---
+
 ## Build from Source
 
 ```bash
@@ -78,14 +106,25 @@ venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run directly
-python dashboard_multi_ui.py
+python dashboard_multi_ui.py        # desktop (+ optional web dashboard)
+python -m fh6_telemetry --headless  # web dashboard only, no Qt
 ```
 
-To rebuild the `.exe`:
+Tests and tools:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest                       # unit + UI smoke tests (offscreen)
+python tools/fake_forza.py             # synthetic Data Out packets (no game needed)
+python tools/bench_ui.py --windows 2,3 # CPU benchmark of the real UI
+```
+
+To rebuild the executables (use the spec files — they bundle the web page):
+
 ```bash
 pip install pyinstaller
-python -m PyInstaller --onefile --windowed --name FH6_Telemetry --collect-all pyqtgraph dashboard_multi_ui.py
-# Output: dist\FH6_Telemetry.exe
+python -m PyInstaller FH6_Telemetry.spec            # dist\FH6_Telemetry.exe
+python -m PyInstaller FH6_Telemetry_Headless.spec   # dist\FH6_Telemetry_Headless.exe
 ```
 
 ---
@@ -94,39 +133,30 @@ python -m PyInstaller --onefile --windowed --name FH6_Telemetry --collect-all py
 
 ```
 FH6_TELEMETRY/
-├── dashboard_multi_ui.py      # Entry point (thin shim)
-├── requirements.txt
-└── fh6_telemetry/             # Main package
+├── dashboard_multi_ui.py      # Desktop entry point (thin shim)
+├── headless_ui.py             # Headless entry point (thin shim)
+├── FH6_Telemetry*.spec        # PyInstaller specs (desktop / headless)
+├── requirements*.txt
+├── docs/                      # web-dashboard guide, performance measuring
+├── tools/                     # fake_forza, record_udp, bench_ui
+├── tests/
+└── fh6_telemetry/
     ├── constants.py           # UDP config, packet format, all mappings
-    ├── telemetry.py           # parse_packet, secs_to_time, TelemetryReceiver
-    ├── style.py               # Dark stylesheet, label helpers, colour utilities
+    ├── telemetry.py           # parse_packet, secs_to_time (Qt-free)
+    ├── style.py               # Dark stylesheet, label helpers
     ├── launcher.py            # LauncherWindow + main()
-    ├── widgets/
-    │   ├── bar_indicator.py   # Labelled progress bar row
-    │   ├── rolling_chart.py   # Scrolling pyqtgraph chart
-    │   ├── tyre_widget.py     # Single-wheel tyre card
-    │   ├── tyre_panel_grid.py # 2×2 tyre card grid
-    │   ├── header_bar.py      # Single-row telemetry strip
-    │   ├── left_info_panel.py # Scrollable car/lap/input panel
-    │   ├── motion_panel.py    # Speed display + motion data grid
-    │   └── toggle_button.py   # Card-style launcher toggle button
-    ├── tabs/
-    │   ├── tyres_tab.py
-    │   ├── engine_tab.py
-    │   ├── inputs_tab.py
-    │   └── motion_tab.py
-    └── windows/
-        ├── category_window.py # Base class (hide-on-close)
-        ├── car_lap_window.py
-        ├── tyres_window.py
-        ├── engine_window.py
-        ├── inputs_window.py
-        ├── motion_window.py
-        └── race_status_window.py
+    ├── headless.py            # hub + web server without Qt
+    ├── core/                  # Qt-free: hub, udp_source, frames, derive, charts,
+    │                          #   range_smoother, config, diagnostics, lowimpact, netinfo
+    ├── gui/                   # NumPy ring buffer for charts
+    ├── web/                   # SSE server, protocol, static page (HTML/CSS/JS)
+    ├── widgets/               # bar_indicator, rolling_chart, tyre widgets, panels
+    ├── tabs/                  # per-window content
+    └── windows/               # category windows (hide-on-close base class)
 ```
 
 ---
 
 ## Packet Format
 
-The dashboard listens for the standard **Forza Data Out** UDP packet (324 bytes). The full field list is defined in [`fh6_telemetry/constants.py`](fh6_telemetry/constants.py).
+The dashboard listens for the standard **Forza Data Out** UDP packet (324 bytes), sent at roughly **75 packets per second** by FH6. The full field list is defined in [`fh6_telemetry/constants.py`](fh6_telemetry/constants.py).

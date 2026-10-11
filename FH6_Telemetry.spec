@@ -7,6 +7,9 @@ hiddenimports = []
 tmp_ret = collect_all('pyqtgraph')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
+# The LAN web dashboard is served from files next to the package.
+datas += [('fh6_telemetry/web/static', 'fh6_telemetry/web/static')]
+
 
 a = Analysis(
     ['dashboard_multi_ui.py'],

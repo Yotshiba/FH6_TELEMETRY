@@ -18,6 +18,8 @@ from pathlib import Path
 
 _MAX_LOG_BYTES = 512 * 1024
 _RATE_LIMIT_S = 30.0
+_UNHANDLED_RATE_S = 5.0
+_MAX_KEYS = 256
 
 _lock = threading.Lock()
 _last_logged: dict[str, float] = {}
@@ -51,6 +53,7 @@ def log_exception(
     exc: BaseException | None = None,
     *,
     rate_limit: bool = True,
+    interval: float = _RATE_LIMIT_S,
 ) -> bool:
     """Append *exc* (default: the exception being handled) to the error log.
 
@@ -63,11 +66,19 @@ def log_exception(
             exc = sys.exc_info()[1]
         if exc is None:
             return False
-        key = f"{where}|{type(exc).__name__}|{exc}"
+        # Key on *where it was raised*, not on the message: a message that embeds
+        # a changing number must not defeat the limiter.
+        tb = exc.__traceback__
+        while tb is not None and tb.tb_next is not None:
+            tb = tb.tb_next
+        site = f"{tb.tb_frame.f_code.co_filename}:{tb.tb_lineno}" if tb is not None else "?"
+        key = f"{where}|{type(exc).__name__}|{site}"
         now = time.monotonic()
         with _lock:
-            if rate_limit and now - _last_logged.get(key, -1e9) < _RATE_LIMIT_S:
+            if rate_limit and now - _last_logged.get(key, -1e9) < interval:
                 return False
+            if len(_last_logged) >= _MAX_KEYS:
+                _last_logged.clear()
             _last_logged[key] = now
             path = log_path()
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +110,13 @@ def install_excepthook(path: Path | None = None) -> None:
             return
         if exc is not None and exc.__traceback__ is None:
             exc = exc.with_traceback(tb)
-        log_exception("unhandled exception", exc, rate_limit=False)
+        # Rate-limited: a paintEvent that raises on every repaint must not flood the disk.
+        log_exception("unhandled exception", exc, interval=_UNHANDLED_RATE_S)
+        try:                                   # console / headless runs keep their traceback
+            if sys.stderr is not None and sys.stderr.isatty():
+                previous(exc_type, exc, tb)
+        except Exception:
+            pass
 
     def _thread_hook(args):
         if args.exc_value is not None:

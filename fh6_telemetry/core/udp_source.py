@@ -11,13 +11,15 @@ Differences from the original ``TelemetryReceiver(QThread)``:
 * a larger receive buffer rides out short GUI stalls;
 * ``stop()`` closes the socket to unblock ``recvfrom`` and returns quickly;
 * a generation token stops a stale thread from publishing after a restart;
-* packets shorter than the expected size are counted, not silently dropped.
+* packets shorter than the expected size (or oversized ones) are counted, not
+  silently dropped, and a transient socket error never kills the thread.
 """
 
 from __future__ import annotations
 
 import socket
 import threading
+import time
 from typing import Callable
 
 from ..constants import PACKET_SIZE
@@ -25,6 +27,8 @@ from .diagnostics import log_exception
 
 _RCVBUF = 512 * 1024
 _POLL_TIMEOUT = 0.25
+_MAX_DATAGRAM = 65535          # larger than any UDP payload: oversize is never an error
+_MAX_CONSECUTIVE_ERRORS = 40   # ~2 s of back-to-back failures => give up and report
 
 
 class UdpBindError(OSError):
@@ -41,6 +45,8 @@ class UdpBindError(OSError):
 
 
 def describe_bind_error(host: str, port: int, exc: OSError) -> str:
+    if isinstance(exc, socket.gaierror):
+        return f"'{host}' is not a valid IPv4 address"
     code = getattr(exc, "winerror", None) or exc.errno
     if code in (10048, 98, 48):  # WSAEADDRINUSE / EADDRINUSE (linux, mac)
         return f"port {port} is already in use by another program"
@@ -52,7 +58,7 @@ def describe_bind_error(host: str, port: int, exc: OSError) -> str:
 
 
 class _Run:
-    """One start()→stop() generation."""
+    """One bind()→stop() generation."""
 
     def __init__(self, sock: socket.socket) -> None:
         self.sock = sock
@@ -63,7 +69,9 @@ class _Run:
 class UdpSource:
     """Receives datagrams and hands the *valid* ones to ``on_packet(bytes)``.
 
-    ``on_packet`` runs on the receive thread; keep it short.
+    ``on_packet`` runs on the receive thread; keep it short.  ``start()`` is
+    ``bind()`` (may raise) followed by ``run()``; callers that must publish
+    state *between* a successful bind and the first packet use them separately.
     """
 
     def __init__(
@@ -83,12 +91,13 @@ class UdpSource:
         self.packets = 0
         self.bad_packets = 0
         self.last_bad_len: int | None = None
+        self.failure: str | None = None      # set if the receive loop gave up
 
     # -- state -------------------------------------------------------------
     @property
     def running(self) -> bool:
         run = self._run
-        return run is not None and not run.stop.is_set()
+        return run is not None and not run.stop.is_set() and self.failure is None
 
     @property
     def bound(self) -> tuple[str, int] | None:
@@ -101,10 +110,10 @@ class UdpSource:
             return None
 
     # -- lifecycle ---------------------------------------------------------
-    def start(self) -> None:
-        """Bind and start receiving.  Raises :class:`UdpBindError`."""
+    def bind(self) -> None:
+        """Create and bind the socket.  Raises :class:`UdpBindError`."""
         with self._lock:
-            if self.running:
+            if self._run is not None and not self._run.stop.is_set():
                 return
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
@@ -117,16 +126,28 @@ class UdpSource:
                     pass
                 sock.settimeout(_POLL_TIMEOUT)
                 sock.bind((self.host, self.port))
-            except OSError as exc:
+            except (OSError, OverflowError, ValueError, UnicodeError, TypeError) as exc:
                 sock.close()
-                raise UdpBindError(self.host, self.port, exc) from exc
+                cause = exc if isinstance(exc, OSError) else OSError(0, str(exc))
+                raise UdpBindError(self.host, self.port, cause) from exc
+            self.failure = None
+            self._run = _Run(sock)
 
-            run = _Run(sock)
+    def run(self) -> None:
+        """Start the receive thread (after a successful :meth:`bind`)."""
+        with self._lock:
+            run = self._run
+            if run is None or run.thread is not None:
+                return
             run.thread = threading.Thread(
                 target=self._loop, args=(run,), name="fh6-udp", daemon=True
             )
-            self._run = run
             run.thread.start()
+
+    def start(self) -> None:
+        """Bind and start receiving.  Raises :class:`UdpBindError`."""
+        self.bind()
+        self.run()
 
     def stop(self, timeout: float = 1.0) -> None:
         """Stop receiving; returns once the thread has ended (or *timeout*)."""
@@ -146,15 +167,26 @@ class UdpSource:
     # -- thread ------------------------------------------------------------
     def _loop(self, run: _Run) -> None:
         sock = run.sock
+        errors = 0
         while not run.stop.is_set():
             try:
-                data, _addr = sock.recvfrom(4096)
+                data, _addr = sock.recvfrom(_MAX_DATAGRAM)
             except socket.timeout:
                 continue
             except ConnectionResetError:  # ICMP "port unreachable" noise
                 continue
-            except OSError:
-                break  # socket closed by stop(), or a fatal error
+            except OSError as exc:
+                if run.stop.is_set():
+                    break  # closed by stop()
+                # A transient error (WSAENOBUFS, …) must not end reception silently.
+                errors += 1
+                log_exception("udp recvfrom", exc)
+                if errors >= _MAX_CONSECUTIVE_ERRORS:
+                    self.failure = f"socket error: {exc.strerror or exc}"
+                    break
+                time.sleep(0.05)
+                continue
+            errors = 0
             if run.stop.is_set() or self._run is not run:
                 break  # stale generation — never publish
             if len(data) < self._packet_size:

@@ -139,6 +139,8 @@ class RollingChart(pg.PlotWidget):
         self._ring.clear()
         if self._smoother is not None:
             self._smoother.reset()
+        for curve in self._curves:               # drop the previous source's lines now,
+            curve.setData([], [])                # not when the first new frame arrives
 
     # ------------------------------------------------------------------
     # Drawing

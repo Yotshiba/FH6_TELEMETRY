@@ -9,17 +9,30 @@ file is moved aside to ``config.json.bak`` — loading never raises.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from ..constants import HOST, PORT
 
+def _is_ipv4(v) -> bool:
+    """A dotted IPv4 literal only (a hostname would block the GUI in bind())."""
+    if not isinstance(v, str):
+        return False
+    try:
+        ipaddress.IPv4Address(v)
+    except ValueError:
+        return False
+    return True
+
+
 # key -> (default, validator)
 _SCHEMA: dict[str, tuple[Any, Any]] = {
-    "udp_host": (HOST, lambda v: isinstance(v, str) and 0 < len(v) <= 255),
+    "udp_host": (HOST, lambda v: _is_ipv4(v)),
     "udp_port": (PORT, lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 65535),
     "refresh_hz": (20, lambda v: v in (10, 15, 20, 30, 60)),
     "low_impact": (None, lambda v: v is None or isinstance(v, bool)),  # None = auto
@@ -65,16 +78,15 @@ class Config:
     def load(cls, path: Path | None = None) -> "Config":
         cfg = cls(path)
         try:
-            raw = cfg.path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return cfg
-        except OSError:
+            raw_bytes = cfg.path.read_bytes()
+        except OSError:                       # missing or unreadable: defaults
             return cfg
         try:
-            data = json.loads(raw)
+            # utf-8-sig: Notepad / PowerShell 5 write a BOM; other encodings are "corrupt"
+            data = json.loads(raw_bytes.decode("utf-8-sig"))
             if not isinstance(data, dict):
                 raise ValueError("config root must be an object")
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):   # UnicodeDecodeError is a ValueError
             try:
                 cfg.path.replace(cfg.path.with_suffix(".json.bak"))
             except OSError:
@@ -88,11 +100,21 @@ class Config:
         """Atomically write the file; returns False on failure (never raises)."""
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._sweep_stale_tmp()
             fd, tmp = tempfile.mkstemp(dir=self.path.parent, suffix=".tmp")
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     json.dump(self.values, fh, indent=2, sort_keys=True)
-                os.replace(tmp, self.path)
+                    fh.flush()
+                    os.fsync(fh.fileno())     # survive a power cut between write and rename
+                for attempt in range(5):      # AV / indexers may briefly hold the target open
+                    try:
+                        os.replace(tmp, self.path)
+                        break
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.05)
             except BaseException:
                 try:
                     os.unlink(tmp)
@@ -102,3 +124,12 @@ class Config:
             return True
         except Exception:
             return False
+
+    def _sweep_stale_tmp(self) -> None:
+        """Remove leftovers of an interrupted save (older than a minute)."""
+        try:
+            for f in self.path.parent.glob("tmp*.tmp"):
+                if time.time() - f.stat().st_mtime > 60:
+                    f.unlink()
+        except OSError:
+            pass

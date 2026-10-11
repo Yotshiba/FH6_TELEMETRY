@@ -1,65 +1,32 @@
 """
-Telemetry parsing and UDP receiver thread.
+Telemetry parsing — pure Python, no Qt (importable by the headless build).
 """
 
 from __future__ import annotations
 
-import socket
+import math
 import struct
-
-from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtWidgets import QWidget
 
 from .constants import FIELDS, PACKET_FORMAT, PACKET_SIZE
 
+_STRUCT = struct.Struct(PACKET_FORMAT)
+
 
 def parse_packet(data: bytes) -> dict:
-    """Unpack a raw UDP datagram into a named-field dict."""
+    """Unpack a raw UDP datagram into a named-field dict.
+
+    Datagrams shorter than a full packet yield ``{}``; longer ones are
+    accepted (only the leading ``PACKET_SIZE`` bytes are used).
+    """
     if len(data) < PACKET_SIZE:
         return {}
-    return dict(zip(FIELDS, struct.unpack_from(PACKET_FORMAT, data)))
+    return dict(zip(FIELDS, _STRUCT.unpack_from(data)))
 
 
 def secs_to_time(s: float) -> str:
-    """Format a float number of seconds as MM:SS.mmm."""
-    if s <= 0:
+    """Format a float number of seconds as M:SS.mmm (``--:--.---`` if unset)."""
+    if not isinstance(s, (int, float)) or not math.isfinite(s) or s <= 0:
         return "--:--.---"
-    minutes = int(s // 60)
-    seconds = s % 60
-    return f"{minutes}:{seconds:06.3f}"
-
-
-class TelemetryReceiver(QThread):
-    """Receives FH6 UDP telemetry packets on a background thread and emits
-    parsed dicts via ``data_ready``."""
-
-    data_ready = pyqtSignal(dict)
-
-    def __init__(
-        self, host: str, port: int, parent: QWidget | None = None
-    ) -> None:
-        super().__init__(parent)
-        self._host    = host
-        self._port    = port
-        self._running = True
-
-    def stop(self) -> None:
-        self._running = False
-
-    def run(self) -> None:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(1.0)
-        sock.bind((self._host, self._port))
-        while self._running:
-            try:
-                data, _ = sock.recvfrom(4096)
-            except socket.timeout:
-                continue
-            except OSError:
-                break
-            if len(data) >= PACKET_SIZE:
-                telemetry = parse_packet(data)
-                if telemetry:
-                    self.data_ready.emit(telemetry)
-        sock.close()
+    # Round to whole milliseconds first so 59.9996 s can't print as "0:60.000".
+    minutes, millis = divmod(int(round(s * 1000.0)), 60_000)
+    return f"{minutes}:{millis / 1000.0:06.3f}"

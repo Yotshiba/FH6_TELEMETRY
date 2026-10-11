@@ -68,7 +68,7 @@ class LeftInfoPanel(QWidget):
             ("Steer",     100.0, 80.0), ("Boost",      30.0, 20.0),
             ("Fuel",      100.0, 20.0),
         ]:
-            bar = BarIndicator(name, max_v, danger)
+            bar = BarIndicator(name, max_v, danger, invert=(name == "Fuel"))
             self._input_bars[name] = bar
             layout.addWidget(bar)
         layout.addWidget(_divider())

@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..constants import _BAR_CONFIGS, WHEEL_COLORS
-from ..style import get_temp_color
+from ..core.derive import get_temp_color
 from .bar_indicator import BarIndicator
 
 

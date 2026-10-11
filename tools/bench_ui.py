@@ -33,6 +33,7 @@ import argparse
 import cProfile
 import ctypes
 import faulthandler
+import inspect
 import io
 import json
 import os
@@ -40,6 +41,7 @@ import pstats
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -186,10 +188,15 @@ def run_benchmark(args: argparse.Namespace) -> None:
     time.sleep(0.3)
 
     # Never listen on the real Data Out port: a running game would feed the
-    # benchmark live packets.  The launcher reads these module globals when it
-    # starts its receiver.
-    L.HOST, L.PORT = "127.0.0.1", args.port
-    win = L.LauncherWindow()
+    # benchmark live packets.
+    if "config" in inspect.signature(L.LauncherWindow.__init__).parameters:
+        from fh6_telemetry.core.config import Config      # Phase 1+ code bases
+        cfg = Config(Path(tempfile.mkdtemp()) / "bench-config.json")
+        cfg.set("udp_port", args.port)
+        win = L.LauncherWindow(cfg)
+    else:                                                  # original code base
+        L.HOST, L.PORT = "127.0.0.1", args.port            # read at construction
+        win = L.LauncherWindow()
     win.show()
     if args.windows == "all":
         win._open_all()

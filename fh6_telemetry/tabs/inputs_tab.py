@@ -40,7 +40,7 @@ class InputsTab(QWidget):
             ("Clutch",    100.0, 90.0), ("Handbrake", 100.0, 90.0),
             ("Boost",      30.0, 20.0), ("Fuel",      100.0, 20.0),
         ]:
-            bar = BarIndicator(name, max_v, danger)
+            bar = BarIndicator(name, max_v, danger, invert=(name == "Fuel"))
             self._bars[name] = bar
             left_layout.addWidget(bar)
 

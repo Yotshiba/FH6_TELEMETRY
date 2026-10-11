@@ -9,7 +9,7 @@ import socket
 import sys
 
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -23,9 +23,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .constants import HOST, PACKET_SIZE, PORT, WHEELS
+from .constants import PACKET_SIZE, WHEELS
+from .core.config import Config
+from .core.diagnostics import install_excepthook, log_exception
+from .core.udp_source import UdpBindError, UdpSource
+from .receiver_qt import TelemetryReceiver
 from .style import _DARK_STYLE
-from .telemetry import TelemetryReceiver
 from .windows.car_lap_window import CarLapWindow
 from .windows.category_window import CategoryWindow
 from .windows.engine_window import EngineWindow
@@ -82,8 +85,9 @@ _CATEGORIES: list[tuple[str, str, str, type[CategoryWindow]]] = [
 class LauncherWindow(QMainWindow):
     """Compact control panel — toggle category windows, monitor connection."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: Config | None = None) -> None:
         super().__init__()
+        self._config = config if config is not None else Config.load()
         self.setWindowTitle("FH6 Telemetry — Launcher")
         self.setFixedWidth(430)
         self.setStyleSheet(_DARK_STYLE)
@@ -130,7 +134,7 @@ class LauncherWindow(QMainWindow):
         ip_lbl = QLabel("IP:")
         ip_lbl.setStyleSheet("color: #888899; font-size: 12px;")
         ip_lbl.setFixedWidth(20)
-        self._ip_edit = QLineEdit(HOST)
+        self._ip_edit = QLineEdit(str(self._config["udp_host"]))
         self._ip_edit.setPlaceholderText("e.g. 127.0.0.1")
         self._ip_edit.setStyleSheet(
             "QLineEdit { background: #111122; color: #ccccdd;"
@@ -142,7 +146,7 @@ class LauncherWindow(QMainWindow):
         port_lbl = QLabel("Port:")
         port_lbl.setStyleSheet("color: #888899; font-size: 12px;")
         port_lbl.setFixedWidth(28)
-        self._port_edit = QLineEdit(str(PORT))
+        self._port_edit = QLineEdit(str(self._config["udp_port"]))
         self._port_edit.setPlaceholderText("1024-65535")
         self._port_edit.setFixedWidth(70)
         self._port_edit.setStyleSheet(
@@ -225,10 +229,17 @@ class LauncherWindow(QMainWindow):
         self._connected = False
         self.adjustSize()
 
-        # UDP receiver
-        self._receiver = TelemetryReceiver(HOST, PORT)
-        self._receiver.data_ready.connect(self._on_telemetry)
-        self._receiver.start()
+        # UDP receiver (bind errors are shown, not raised)
+        self._receiver: TelemetryReceiver | None = None
+        self._start_receiver(
+            str(self._config["udp_host"]), int(self._config["udp_port"])
+        )
+
+        # 1 Hz status poll: wrong packet size / silence after a connection
+        self._status_timer = QTimer(self)
+        self._status_timer.setInterval(1000)
+        self._status_timer.timeout.connect(self._poll_status)
+        self._status_timer.start()
 
     # ------------------------------------------------------------------
     # Button factories
@@ -296,22 +307,46 @@ class LauncherWindow(QMainWindow):
             return None
         return ip, port
 
+    def _set_status(self, text: str, colour: str) -> None:
+        self._conn_lbl.setText(text)
+        self._conn_lbl.setStyleSheet(f"color: {colour};")
+
     def _test_connection(self) -> None:
         """Try to bind a UDP socket and report whether the port is available."""
         parsed = self._parse_inputs()
         if parsed is None:
             return
         ip, port = parsed
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        current = self._receiver.bound if self._receiver is not None else None
+        if current is not None and (ip, port) == (current[0], current[1]):
+            self._set_status(f"⬤  OK — already listening on {ip}:{port}", "#22BB44")
+            return
+        probe = UdpSource(ip, port, lambda _data: None)
         try:
-            sock.bind((ip, port))
-            self._conn_lbl.setText(f"⬤  OK — {ip}:{port} is available")
-            self._conn_lbl.setStyleSheet("color: #FFDD44;")
-        except OSError as exc:
-            self._conn_lbl.setText(f"⬤  Bind failed: {exc.strerror}")
-            self._conn_lbl.setStyleSheet("color: #FF4444;")
+            probe.start()
+        except UdpBindError as exc:
+            self._set_status(f"⬤  Bind failed: {exc}", "#FF4444")
+        else:
+            self._set_status(f"⬤  OK — {ip}:{port} is available", "#FFDD44")
         finally:
-            sock.close()
+            probe.stop()
+
+    def _start_receiver(self, ip: str, port: int) -> bool:
+        """Stop the current receiver and listen on *ip*:*port*; show any error."""
+        if self._receiver is not None:
+            self._receiver.stop()
+            self._receiver = None
+        self._connected = False
+        receiver = TelemetryReceiver(ip, port)
+        receiver.data_ready.connect(self._on_telemetry)
+        try:
+            receiver.start()
+        except UdpBindError as exc:
+            self._set_status(f"⬤  Cannot listen on {ip}:{port} — {exc}", "#FF4444")
+            return False
+        self._receiver = receiver
+        self._set_status(f"⬤  Listening on {ip}:{port} …", "#888866")
+        return True
 
     def _connect(self) -> None:
         """Stop the current receiver and restart it with the new IP/port."""
@@ -319,14 +354,22 @@ class LauncherWindow(QMainWindow):
         if parsed is None:
             return
         ip, port = parsed
-        self._receiver.stop()
-        self._receiver.wait(2000)
-        self._connected = False
-        self._receiver = TelemetryReceiver(ip, port)
-        self._receiver.data_ready.connect(self._on_telemetry)
-        self._receiver.start()
-        self._conn_lbl.setText(f"⬤  Listening on {ip}:{port} …")
-        self._conn_lbl.setStyleSheet("color: #888866;")
+        if self._start_receiver(ip, port):
+            self._config.set("udp_host", ip)
+            self._config.set("udp_port", port)
+            self._config.save()
+
+    def _poll_status(self) -> None:
+        """Explain silence: wrong packet size, or no packets yet."""
+        rx = self._receiver
+        if rx is None or self._connected:
+            return
+        if rx.packets == 0 and rx.bad_packets > 0:
+            self._set_status(
+                f"⬤  Receiving {rx.last_bad_len}-byte packets — expected "
+                f"{PACKET_SIZE}. Set Data Out Packet Format to “Car Dash”.",
+                "#FF9900",
+            )
 
     # ------------------------------------------------------------------
     # Telemetry slot
@@ -343,31 +386,41 @@ class LauncherWindow(QMainWindow):
 
         if not self._connected:
             self._connected = True
-            self._conn_lbl.setText(
-                f"⬤  Connected  —  {HOST}:{PORT}  —  {PACKET_SIZE} bytes/packet"
+            bound = self._receiver.bound if self._receiver is not None else None
+            where = f"{bound[0]}:{bound[1]}" if bound else "?"
+            self._set_status(
+                f"⬤  Connected  —  {where}  —  {PACKET_SIZE} bytes/packet", "#22BB44"
             )
-            self._conn_lbl.setStyleSheet("color: #22BB44;")
 
         self._ts_lbl.setText(f"TimestampMS: {t.get('TimestampMS', 0)}")
 
         for win in self._windows:
             if win.isVisible():
-                win.update_data(t)
+                try:
+                    win.update_data(t)
+                except Exception as exc:  # one bad window/frame must not kill the app
+                    log_exception(f"update {win.windowTitle()}", exc)
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        self._status_timer.stop()
         for win in self._windows:
             win.force_close()
-        self._receiver.stop()
-        self._receiver.wait(2000)
+        if self._receiver is not None:
+            self._receiver.stop()
         super().closeEvent(event)
 
 
-def main() -> None:
+def setup_pyqtgraph() -> None:
     pg.setConfigOptions(antialias=True, foreground="#cccccc", background="#0d0d1a")
+
+
+def main() -> None:
+    install_excepthook()
+    setup_pyqtgraph()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     launcher = LauncherWindow()

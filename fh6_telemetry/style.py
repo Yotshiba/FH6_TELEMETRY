@@ -9,8 +9,6 @@ from typing import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QLabel
 
-from .constants import _TEMP_COLORS
-
 # ---------------------------------------------------------------------------
 # Type alias used by RollingChart
 # ---------------------------------------------------------------------------
@@ -89,24 +87,3 @@ def _divider() -> QFrame:
     line.setFrameShape(QFrame.Shape.HLine)
     line.setStyleSheet("color: #2a2a4a; margin: 2px 0;")
     return line
-
-# ---------------------------------------------------------------------------
-# Colour helpers
-# ---------------------------------------------------------------------------
-
-def get_temp_color(temp: float) -> str:
-    """Return a hex colour string for the given tyre temperature."""
-    for threshold, colour in _TEMP_COLORS:
-        if temp < threshold:
-            return colour
-    return _TEMP_COLORS[-1][1]
-
-
-def _bar_color(value: float, danger: float) -> str:
-    """Green → amber → red progress-bar colour based on value vs danger threshold."""
-    ratio = value / danger if danger > 0 else 0.0
-    if ratio < 0.6:
-        return "#22BB44"
-    if ratio < 1.0:
-        return "#FF9900"
-    return "#DD2200"

@@ -4,10 +4,12 @@ BarIndicator — a labelled progress bar row.
 
 from __future__ import annotations
 
+import math
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QSizePolicy, QWidget
 
-from ..style import _bar_color
+from ..core.derive import bar_color
 
 
 class BarIndicator(QWidget):
@@ -32,10 +34,13 @@ class BarIndicator(QWidget):
         max_val: float,
         danger: float,
         parent: QWidget | None = None,
+        *,
+        invert: bool = False,
     ) -> None:
         super().__init__(parent)
         self._max_val = max_val
         self._danger  = danger
+        self._invert  = invert   # True: low values are bad (fuel)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 1, 0, 1)
@@ -68,6 +73,8 @@ class BarIndicator(QWidget):
         self._update_color(0.0)
 
     def update_value(self, value: float) -> None:
+        if not math.isfinite(value):
+            value = 0.0
         clamped = max(0.0, min(value, self._max_val))
         self._bar.setValue(int(clamped / self._max_val * 1000))
         self._val_lbl.setText(f"{value:+.3f}" if abs(value) < 10 else f"{value:.1f}")
@@ -75,5 +82,7 @@ class BarIndicator(QWidget):
 
     def _update_color(self, value: float) -> None:
         self._bar.setStyleSheet(
-            self._BAR_STYLE.format(color=_bar_color(value, self._danger))
+            self._BAR_STYLE.format(
+                color=bar_color(value, self._danger, self._invert)
+            )
         )

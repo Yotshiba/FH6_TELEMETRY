@@ -21,8 +21,15 @@ from ..widgets.rolling_chart import RollingChart
 class InputsTab(QWidget):
     """Input bars + steer direction label (left) + Throttle/Brake chart (right)."""
 
+    _STEER_STYLES = {
+        "left":     "color: #44CCFF; font-size: 13px; font-family: monospace; padding: 4px;",
+        "right":    "color: #FF9900; font-size: 13px; font-family: monospace; padding: 4px;",
+        "straight": "color: #888899; font-size: 13px; font-family: monospace; padding: 4px;",
+    }
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._steer_state = "straight"
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -80,19 +87,14 @@ class InputsTab(QWidget):
         self._steer_bar.update_value(abs(steer_pct))
 
         if raw_steer < -5:
-            self._steer_dir.setText(f"◄  LEFT  {abs(steer_pct):.0f}%")
-            self._steer_dir.setStyleSheet(
-                "color: #44CCFF; font-size: 13px; font-family: monospace; padding: 4px;"
-            )
+            state, text = "left", f"◄  LEFT  {abs(steer_pct):.0f}%"
         elif raw_steer > 5:
-            self._steer_dir.setText(f"RIGHT  {steer_pct:.0f}%  ►")
-            self._steer_dir.setStyleSheet(
-                "color: #FF9900; font-size: 13px; font-family: monospace; padding: 4px;"
-            )
+            state, text = "right", f"RIGHT  {steer_pct:.0f}%  ►"
         else:
-            self._steer_dir.setText("─  STRAIGHT  ─")
-            self._steer_dir.setStyleSheet(
-                "color: #888899; font-size: 13px; font-family: monospace; padding: 4px;"
-            )
+            state, text = "straight", "─  STRAIGHT  ─"
+        if state != self._steer_state:        # restyle only when the direction flips
+            self._steer_state = state
+            self._steer_dir.setStyleSheet(self._STEER_STYLES[state])
+        self._steer_dir.setText(text)
 
         self._tb_chart.append(t)

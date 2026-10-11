@@ -24,8 +24,20 @@ from .category_window import CategoryWindow
 class RaceStatusWindow(CategoryWindow):
     """Vertical race-status panel — all header data in a readable grid."""
 
+    _RACE_ON_STYLE = (
+        "color: #22BB44; font-size: 14px; font-weight: bold;"
+        " background: #0a2010; border: 1px solid #22BB44;"
+        " border-radius: 6px; padding: 6px;"
+    )
+    _RACE_OFF_STYLE = (
+        "color: #664444; font-size: 14px; font-weight: bold;"
+        " background: #1a1a2e; border: 1px solid #2a2a4a;"
+        " border-radius: 6px; padding: 6px;"
+    )
+
     def __init__(self) -> None:
         super().__init__()
+        self._race_on: bool | None = None      # None: still showing "NO SIGNAL"
         self.setWindowTitle("FH6 — Race Status")
         self.setMinimumSize(260, 480)
 
@@ -139,19 +151,11 @@ class RaceStatusWindow(CategoryWindow):
 
     def update_data(self, t: dict) -> None:
         is_on = bool(t.get("IsRaceOn", 0))
-        if is_on:
-            self._race_lbl.setText("⬤  RACE ON")
+        if is_on != self._race_on:             # restyle only when the state flips
+            self._race_on = is_on
+            self._race_lbl.setText("⬤  RACE ON" if is_on else "⬤  PAUSED")
             self._race_lbl.setStyleSheet(
-                "color: #22BB44; font-size: 14px; font-weight: bold;"
-                " background: #0a2010; border: 1px solid #22BB44;"
-                " border-radius: 6px; padding: 6px;"
-            )
-        else:
-            self._race_lbl.setText("⬤  PAUSED")
-            self._race_lbl.setStyleSheet(
-                "color: #664444; font-size: 14px; font-weight: bold;"
-                " background: #1a1a2e; border: 1px solid #2a2a4a;"
-                " border-radius: 6px; padding: 6px;"
+                self._RACE_ON_STYLE if is_on else self._RACE_OFF_STYLE
             )
 
         self._speed_lbl.setText(f"{t.get('Speed', 0.0) * 3.6:.0f}")

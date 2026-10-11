@@ -53,6 +53,10 @@ class TyreWidget(QFrame):
     def __init__(self, wheel: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._wheel = wheel
+        # Last-applied style state: setStyleSheet re-polishes the widget, so it
+        # is only called when the colour bucket / flag actually changes.
+        self._temp_bg: str | None = None
+        self._badge_state: dict[QLabel, bool] = {}
         self.setStyleSheet(self._CARD_STYLE)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -127,17 +131,22 @@ class TyreWidget(QFrame):
     # ------------------------------------------------------------------
 
     def _set_badge(self, badge: QLabel, active: bool, color: str) -> None:
+        if self._badge_state.get(badge) is active:
+            return
+        self._badge_state[badge] = active
         badge.setStyleSheet(
             self._BADGE_ON.format(color=color) if active else self._BADGE_OFF
         )
 
     def _set_temp(self, temp: float) -> None:
         bg = get_temp_color(temp)
-        r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
-        brightness = (r * 299 + g * 587 + b * 114) / 1000
-        fg = "#ffffff" if brightness < 128 else "#111111"
+        if bg != self._temp_bg:
+            self._temp_bg = bg
+            r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
+            brightness = (r * 299 + g * 587 + b * 114) / 1000
+            fg = "#ffffff" if brightness < 128 else "#111111"
+            self._temp_lbl.setStyleSheet(self._TEMP_LBL_STYLE.format(bg=bg, fg=fg))
         self._temp_lbl.setText(f"{temp:.1f} °C")
-        self._temp_lbl.setStyleSheet(self._TEMP_LBL_STYLE.format(bg=bg, fg=fg))
 
     def update_data(self, t: dict) -> None:
         w = self._wheel

@@ -109,6 +109,6 @@ def test_fuel_bar_is_red_when_nearly_empty(qapp, launcher):
     inputs = win._windows[4]                      # Inputs window
     bar = inputs._tab._bars["Fuel"]
     bar.update_value(5.0)
-    assert "#DD2200" in bar._bar.styleSheet()
+    assert bar._bar.color == "#DD2200"
     bar.update_value(90.0)
-    assert "#22BB44" in bar._bar.styleSheet()
+    assert bar._bar.color == "#22BB44"

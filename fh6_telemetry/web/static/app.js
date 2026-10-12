@@ -1,19 +1,106 @@
 // Boot: connect the stream, build the views once the server has described itself
-// ("hello"), then redraw the active view at most ~30 times a second.
+// ("hello"), then drive the animation loop.  Everything optional (sound, effects, themes,
+// analytics) hangs off the settings and the event bus.
 
+import { Analytics } from './analytics.js';
+import { emit, on } from './bus.js';
+import { setChartUnits } from './charts.js';
+import { exportCsv, exportShareCard, KeepAwake, onKonami } from './extras.js';
+import { Feel } from './feel.js';
 import { gearLabel } from './format.js';
+import { Fx } from './fx.js';
+import { Lifetime } from './lifetime.js';
+import { Settings } from './settings.js';
+import { buildDrawer } from './settings_ui.js';
+import { shiftLevel } from './shift.js';
 import { Store } from './store.js';
 import { Stream } from './stream.js';
+import { invalidateTheme } from './theme.js';
+import { initToasts } from './toasts.js';
+import { buildCar } from './view_car.js';
+import { buildCockpit } from './view_cockpit.js';
+import { buildLab } from './view_lab.js';
+import { buildMap } from './view_map.js';
+import { buildTimeline } from './view_timeline.js';
 import { buildViews } from './views.js';
 
+const $ = (id) => document.getElementById(id);
+const tabsEl = $('tabs'), viewsEl = $('views'), connEl = $('conn'), connText = $('conn-text');
+const drawer = $('drawer'), backdrop = $('backdrop');
+
+const settings = new Settings();
+const lifetime = new Lifetime();
 const store = new Store();
+setChartUnits(() => settings.get('units'));
+
 let views = [];
 let active = null;
 let lastVersion = -1;
 let connState = '';
+let mapView = null;
 
-const $ = (id) => document.getElementById(id);
-const tabsEl = $('tabs'), viewsEl = $('views'), connEl = $('conn'), connText = $('conn-text');
+// ---- theme ----------------------------------------------------------------------------------------
+
+function applyTheme() {
+  document.documentElement.dataset.theme = settings.get('theme');
+  invalidateTheme();
+  requestAnimationFrame(() => {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && bg) meta.setAttribute('content', bg);
+  });
+  lastVersion = -1;
+  for (const v of views) for (const c of v.charts) c.dirty = true;
+}
+applyTheme();
+
+// ---- the optional layers ------------------------------------------------------------------------------
+
+const analytics = new Analytics(store, lifetime, settings);
+const feel = new Feel({ store, settings });
+feel.start();
+initToasts($('toasts'));
+const fx = new Fx($('fx'), $('vignette'), $('shake'), settings);
+const keepAwake = new KeepAwake();
+
+const actions = {
+  toggleSound: async () => {
+    try { await feel.toggleSound(); } catch (e) {
+      emit('toast', { icon: '🔇', title: 'Sound unavailable', text: (e && e.message) || 'This browser blocked audio', rarity: 'common' });
+    }
+  },
+  openDrawer: () => { drawer.classList.add('open'); backdrop.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); },
+  closeDrawer: () => { drawer.classList.remove('open'); backdrop.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true'); },
+  fullscreen: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); },
+  exportCsv: () => { if (!exportCsv(store)) emit('toast', { icon: '📭', title: 'Nothing recorded yet', text: 'Drive for a few seconds first', rarity: 'common' }); },
+  shareCard: () => exportShareCard({ analytics, lifetime, settings, trail: mapView ? mapView._trail : null }),
+  clearMap: () => { if (mapView) mapView.clear(); },
+  resetSession: () => { analytics.resetSession(); store.clearHistory(); emit('toast', { icon: '↺', title: 'Session reset', text: 'Timers, records and rewind history cleared', rarity: 'common', ms: 2200 }); },
+  // rebind first: it banks the live session's records into the lifetime, which reset() then blanks (otherwise the
+  // running trackers would re-merge their maxima / odometer within 2 s and 'erase' would silently undo itself)
+  resetLifetime: () => { analytics.resetSession(); lifetime.reset(); analytics.achievements.reset(); emit('toast', { icon: '🗑', title: 'Lifetime stats erased', text: '', rarity: 'common', ms: 2200 }); },
+};
+const ctx = { store, settings, analytics, lifetime, fx, actions };
+
+buildDrawer(drawer, ctx);
+$('btn-settings').addEventListener('click', () => actions.openDrawer());
+backdrop.addEventListener('click', () => actions.closeDrawer());
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') actions.closeDrawer(); });
+
+on('settings', ({ path }) => {
+  if (path === 'theme' || path === '*') applyTheme();
+  if (path === 'keepAwake' || path === '*') { if (settings.get('keepAwake')) keepAwake.enable(); else keepAwake.disable(); }
+  if (path && path.startsWith('units')) { lastVersion = -1; for (const v of views) for (const c of v.charts) c.dirty = true; }
+});
+if (settings.get('keepAwake')) keepAwake.enable();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastVersion = -1; keepAwake.reacquire(); } });
+
+onKonami(() => {
+  settings.set('theme', 'hyperdrive');
+  emit('toast', { icon: '🚀', title: 'HYPERDRIVE ENGAGED', text: 'Pick another theme in ⚙ to come back', rarity: 'legendary' });
+});
+
+// ---- connection state ------------------------------------------------------------------------------------
 
 const CONN_TEXT = {
   connecting: 'Connecting…', reconnecting: 'Reconnecting…', nosignal: 'No signal — waiting for the game',
@@ -28,7 +115,7 @@ function setConn(state) {
   connText.textContent = text;
 }
 
-// ---- views / tabs ---------------------------------------------------------------------
+// ---- views / tabs -------------------------------------------------------------------------------------------
 
 function select(id, persist = true) {
   const v = views.find((x) => x.id === id) || views[0];
@@ -38,6 +125,7 @@ function select(id, persist = true) {
   for (const b of tabsEl.children) b.setAttribute('aria-selected', String(b.dataset.view === v.id));
   lastVersion = -1;
   for (const c of v.charts) { c.dirty = true; c.resize(); }
+  fx.speedOn = v.id === 'cockpit' || v.id === 'dash';
   if (persist) {
     try { history.replaceState(null, '', '#' + v.id); } catch { /* sandboxed */ }
     try { localStorage.setItem('fh6.view', v.id); } catch { /* private mode */ }
@@ -45,7 +133,12 @@ function select(id, persist = true) {
 }
 
 function initViews() {
-  views = buildViews(store);
+  const cockpit = buildCockpit(ctx);
+  mapView = buildMap(ctx);
+  const classic = buildViews(store, settings);
+  const byId = Object.fromEntries(classic.map((v) => [v.id, v]));
+  views = [cockpit, byId.dash, mapView, buildLab(ctx), buildCar(ctx), buildTimeline(ctx),
+    byId.race, byId.car, byId.tyres, byId.engine, byId.inputs, byId.motion].filter(Boolean);
   for (const v of views) {
     viewsEl.appendChild(v.el);
     const b = document.createElement('button');
@@ -56,28 +149,30 @@ function initViews() {
   }
   let wanted = location.hash.slice(1);
   if (!wanted) { try { wanted = localStorage.getItem('fh6.view') || ''; } catch { /* ignore */ } }
-  select(wanted || 'dash', false);
-  addFullscreenButton();
+  select(wanted || 'cockpit', false);
+  firstRunTip();
+}
+
+function firstRunTip() {
+  try {
+    if (localStorage.getItem('fh6.tip')) return;
+    localStorage.setItem('fh6.tip', '1');
+  } catch { return; }
+  setTimeout(() => emit('toast', { icon: '⚙', title: 'Make it yours', text: 'Open settings for engine sound, themes, units and effects', rarity: 'rare', ms: 6000 }), 1500);
 }
 
 window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (id && views.length) select(id, false); });
 
-function addFullscreenButton() {
-  if (!document.fullscreenEnabled) return;       // not on iPhone: use "Add to Home Screen" instead
-  const b = document.createElement('button');
-  b.className = 'tab'; b.type = 'button'; b.textContent = '⛶'; b.title = 'Fullscreen'; b.setAttribute('aria-label', 'Fullscreen');
-  b.addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
-  });
-  connEl.before(b);
-}
-
-// ---- stream ----------------------------------------------------------------------------
+// ---- stream ---------------------------------------------------------------------------------------------------
 
 const guard = (fn) => (...a) => { try { fn(...a); } catch (e) { console.error(e); } };
 
 const stream = new Stream({
-  state: (s) => setConn(s === 'connecting' || s === 'reconnecting' || s === 'paused' ? s : connState),
+  state: (s) => {
+    // no live link: sound / haptics / voice must not keep acting on the last row we happened to get
+    if (s === 'connecting' || s === 'reconnecting' || s === 'paused') store.signal = false;
+    setConn(s === 'connecting' || s === 'reconnecting' || s === 'paused' ? s : connState);
+  },
   hello: guard((d) => {
     store.setHello(d);
     if (!views.length) initViews();
@@ -86,43 +181,70 @@ const stream = new Stream({
   }),
   hist: guard((d) => {
     store.clearHistory();
-    store.pushRows(d.r);
+    store.pushRows(d.r, true);                 // replay: fills charts + timeline, no achievements
     store.seq = d.s + d.r.length - 1;
   }),
   f: guard((d, s) => {
-    if (store.seq !== null && d.s - d.r.length !== store.seq) { s.reopen(); return; }   // gap: resync
-    store.pushRows(d.r);
-    store.seq = d.s;
+    if (store.applyFrames(d)) return;
+    // Gap: resume from the last batch we really applied (the stream's own resume point has already
+    // moved past the hole, which would otherwise freeze the dashboard in a reconnect loop).
+    s.lastId = store.resumeId();
+    s.reopen();
   }),
-  s: guard((d) => { store.slow = d; store.version++; }),
+  s: guard((d) => store.pushSlow(d)),
   rg: guard((d) => { Object.assign(store.ranges, d); store.version++; }),
   st: guard((d) => {
     const was = store.signal;
     store.signal = !!d.sig; store.pps = d.pps || 0;
     if (was !== store.signal) {
       store.version++;
-      if (active) active.update();          // don't wait for a (possibly throttled) animation frame
+      if (active && !active.animated) active.update(0, performance.now());
     }
     setConn(store.signal ? 'live' : 'nosignal');
   }),
-  reset: () => { store.seq = null; store.last = null; store.slow = null; store.version++; },
+  reset: () => { store.seq = null; store.last = null; store.slow = null; store.version++; analytics.resetSession(); },
 });
 
-// ---- draw loop ---------------------------------------------------------------------------
+// ---- animation loop ---------------------------------------------------------------------------------------------
 
-let lastDraw = 0;
+let lastTs = 0, lastDraw = 0, lastAnim = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
-  if (!active || document.hidden || ts - lastDraw < 32) return;
-  lastDraw = ts;
+  if (document.hidden) return;
+  const dt = Math.min(0.1, (ts - (lastTs || ts)) / 1000);
+  lastTs = ts;
   try {
+    // effects run on every frame (they are cheap and animate on their own)
+    if (store.hello && store.last) {
+      // speed lines / redline vignette only while a live, racing row is arriving (not on the last row of a dead link)
+      if (store.signal && store.f('IsRaceOn')) {
+        const maxRpm = store.f('EngineMaxRpm') || 8000, rpm = store.f('CurrentEngineRpm');
+        const lvl = shiftLevel(rpm, maxRpm, settings.get('shift'));
+        fx.draw(ts, { speedKmh: store.f('SpeedKmh'), rpmRatio: lvl.ratio, flashing: lvl.flashing });
+      } else {
+        fx.draw(ts, { speedKmh: 0, rpmRatio: 0, flashing: false });   // confetti / shake still animate out
+      }
+    }
+    if (!active) return;
     if (store.hello && store.last) store.gear = gearLabel(store.hello.lab, store.f('Gear'), store.gear);
-    if (store.version !== lastVersion) { lastVersion = store.version; active.update(); }
+    if (active.animated) {
+      if (ts - lastAnim < 14) return;                              // ~60 fps cap: a 120 Hz phone draws every 2nd frame
+      const adt = Math.min(0.1, (ts - (lastAnim || ts)) / 1000);   // seconds since the last DRAW, not the last frame
+      lastAnim = ts;
+      active.update(adt, ts);
+      return;
+    }
+    if (ts - lastDraw < 32) return;
+    lastDraw = ts;
+    if (store.version !== lastVersion) { lastVersion = store.version; active.update(dt, ts); }
     for (const c of active.charts) c.draw();
   } catch (e) { console.error(e); }
 }
 requestAnimationFrame(frame);
 
-document.addEventListener('visibilitychange', () => { if (!document.hidden) lastVersion = -1; });
+on('analytics', (ev) => {                        // shake on hard landings
+  if (ev.type === 'air_end') fx.shake(Math.min(12, 4 + ev.durationS * 4));
+  if (ev.type === 'redline') fx.shake(2);
+});
 
 stream.start();

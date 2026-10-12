@@ -1,0 +1,673 @@
+{
+ "F": [
+  {
+   "d": 0,
+   "k": "IsRaceOn",
+   "u": ""
+  },
+  {
+   "d": 0,
+   "k": "CurrentEngineRpm",
+   "u": "rpm"
+  },
+  {
+   "d": 0,
+   "k": "EngineMaxRpm",
+   "u": "rpm"
+  },
+  {
+   "d": 1,
+   "k": "SpeedKmh",
+   "u": "km/h"
+  },
+  {
+   "d": 1,
+   "k": "PowerHp",
+   "u": "hp"
+  },
+  {
+   "d": 1,
+   "k": "Torque",
+   "u": "Nm"
+  },
+  {
+   "d": 3,
+   "k": "BoostBar",
+   "u": "bar"
+  },
+  {
+   "d": 1,
+   "k": "FuelPct",
+   "u": "%"
+  },
+  {
+   "d": 0,
+   "k": "Gear",
+   "u": ""
+  },
+  {
+   "d": 1,
+   "k": "AccelPct",
+   "u": "%"
+  },
+  {
+   "d": 1,
+   "k": "BrakePct",
+   "u": "%"
+  },
+  {
+   "d": 1,
+   "k": "ClutchPct",
+   "u": "%"
+  },
+  {
+   "d": 1,
+   "k": "HandBrakePct",
+   "u": "%"
+  },
+  {
+   "d": 1,
+   "k": "SteerPct",
+   "u": "%"
+  },
+  {
+   "d": 1,
+   "k": "TireTempFL",
+   "u": "\u00b0C"
+  },
+  {
+   "d": 1,
+   "k": "TireTempFR",
+   "u": "\u00b0C"
+  },
+  {
+   "d": 1,
+   "k": "TireTempRL",
+   "u": "\u00b0C"
+  },
+  {
+   "d": 1,
+   "k": "TireTempRR",
+   "u": "\u00b0C"
+  },
+  {
+   "d": 3,
+   "k": "SuspNormFL",
+   "u": "norm"
+  },
+  {
+   "d": 3,
+   "k": "SuspNormFR",
+   "u": "norm"
+  },
+  {
+   "d": 3,
+   "k": "SuspNormRL",
+   "u": "norm"
+  },
+  {
+   "d": 3,
+   "k": "SuspNormRR",
+   "u": "norm"
+  },
+  {
+   "d": 0,
+   "k": "TimestampMS",
+   "u": "ms"
+  },
+  {
+   "d": 2,
+   "k": "AccelGX",
+   "u": "g"
+  },
+  {
+   "d": 2,
+   "k": "AccelGZ",
+   "u": "g"
+  },
+  {
+   "d": 1,
+   "k": "SideslipDeg",
+   "u": "\u00b0"
+  },
+  {
+   "d": 3,
+   "k": "Pitch",
+   "u": "rad"
+  },
+  {
+   "d": 3,
+   "k": "Roll",
+   "u": "rad"
+  },
+  {
+   "d": 3,
+   "k": "Yaw",
+   "u": "rad"
+  },
+  {
+   "d": 1,
+   "k": "PositionX",
+   "u": "m"
+  },
+  {
+   "d": 1,
+   "k": "PositionZ",
+   "u": "m"
+  }
+ ],
+ "S": [
+  {
+   "d": 3,
+   "k": "TireSlipRatioFL"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipRatioFR"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipRatioRL"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipRatioRR"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipAngleFL"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipAngleFR"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipAngleRL"
+  },
+  {
+   "d": 3,
+   "k": "TireSlipAngleRR"
+  },
+  {
+   "d": 3,
+   "k": "TireCombinedSlipFL"
+  },
+  {
+   "d": 3,
+   "k": "TireCombinedSlipFR"
+  },
+  {
+   "d": 3,
+   "k": "TireCombinedSlipRL"
+  },
+  {
+   "d": 3,
+   "k": "TireCombinedSlipRR"
+  },
+  {
+   "d": 4,
+   "k": "SuspTravelMFL"
+  },
+  {
+   "d": 4,
+   "k": "SuspTravelMFR"
+  },
+  {
+   "d": 4,
+   "k": "SuspTravelMRL"
+  },
+  {
+   "d": 4,
+   "k": "SuspTravelMRR"
+  },
+  {
+   "d": 1,
+   "k": "WheelRotSpeedFL"
+  },
+  {
+   "d": 1,
+   "k": "WheelRotSpeedFR"
+  },
+  {
+   "d": 1,
+   "k": "WheelRotSpeedRL"
+  },
+  {
+   "d": 1,
+   "k": "WheelRotSpeedRR"
+  },
+  {
+   "d": 0,
+   "k": "WheelFlags"
+  },
+  {
+   "d": 0,
+   "k": "LapNumber"
+  },
+  {
+   "d": 0,
+   "k": "RacePosition"
+  },
+  {
+   "d": 0,
+   "k": "CurrentLapMs"
+  },
+  {
+   "d": 0,
+   "k": "CurrentRaceTimeMs"
+  },
+  {
+   "d": 0,
+   "k": "BestLapMs"
+  },
+  {
+   "d": 0,
+   "k": "LastLapMs"
+  },
+  {
+   "d": 1,
+   "k": "DistanceTraveled"
+  },
+  {
+   "d": 0,
+   "k": "CarClass"
+  },
+  {
+   "d": 0,
+   "k": "CarPerformanceIndex"
+  },
+  {
+   "d": 0,
+   "k": "DrivetrainType"
+  },
+  {
+   "d": 0,
+   "k": "NumCylinders"
+  },
+  {
+   "d": 0,
+   "k": "CarGroup"
+  },
+  {
+   "d": 0,
+   "k": "SmashableMass"
+  },
+  {
+   "d": 2,
+   "k": "SmashableVelDiff"
+  },
+  {
+   "d": 3,
+   "k": "AccelGX"
+  },
+  {
+   "d": 3,
+   "k": "AccelGY"
+  },
+  {
+   "d": 3,
+   "k": "AccelGZ"
+  },
+  {
+   "d": 2,
+   "k": "VelocityX"
+  },
+  {
+   "d": 2,
+   "k": "VelocityY"
+  },
+  {
+   "d": 2,
+   "k": "VelocityZ"
+  },
+  {
+   "d": 3,
+   "k": "AngularVelocityX"
+  },
+  {
+   "d": 3,
+   "k": "AngularVelocityY"
+  },
+  {
+   "d": 3,
+   "k": "AngularVelocityZ"
+  },
+  {
+   "d": 4,
+   "k": "Yaw"
+  },
+  {
+   "d": 4,
+   "k": "Pitch"
+  },
+  {
+   "d": 4,
+   "k": "Roll"
+  },
+  {
+   "d": 1,
+   "k": "PositionX"
+  },
+  {
+   "d": 1,
+   "k": "PositionY"
+  },
+  {
+   "d": 1,
+   "k": "PositionZ"
+  },
+  {
+   "d": 0,
+   "k": "NormalizedDrivingLine"
+  },
+  {
+   "d": 0,
+   "k": "NormalizedAIBrakeDifference"
+  },
+  {
+   "d": 1,
+   "k": "BoostPsi"
+  }
+ ],
+ "charts": [
+  {
+   "id": "engine_rpm",
+   "lines": [
+    {
+     "color": "#FFDD44",
+     "k": 1,
+     "label": "RPM"
+    },
+    {
+     "color": "#FF4444",
+     "k": 2,
+     "label": "Max RPM"
+    }
+   ],
+   "title": "RPM",
+   "unit": "rpm",
+   "y": {
+    "floor": [
+     0.0,
+     10000.0
+    ]
+   }
+  },
+  {
+   "id": "engine_power_torque",
+   "lines": [
+    {
+     "color": "#44CCFF",
+     "k": 4,
+     "label": "Power (hp)"
+    },
+    {
+     "color": "#FF9900",
+     "k": 5,
+     "label": "Torque (Nm)"
+    }
+   ],
+   "title": "Power & Torque",
+   "unit": "hp / Nm",
+   "y": {
+    "min": 0.0
+   }
+  },
+  {
+   "id": "tyre_temp",
+   "lines": [
+    {
+     "color": "#FF4444",
+     "k": 14,
+     "label": "FL"
+    },
+    {
+     "color": "#44CCFF",
+     "k": 15,
+     "label": "FR"
+    },
+    {
+     "color": "#FF9900",
+     "k": 16,
+     "label": "RL"
+    },
+    {
+     "color": "#44DD44",
+     "k": 17,
+     "label": "RR"
+    }
+   ],
+   "title": "Tyre Temp",
+   "unit": "\u00b0C",
+   "y": {
+    "min": 0.0
+   }
+  },
+  {
+   "id": "inputs_throttle_brake",
+   "lines": [
+    {
+     "color": "#22BB44",
+     "k": 9,
+     "label": "Throttle"
+    },
+    {
+     "color": "#DD2200",
+     "k": 10,
+     "label": "Brake"
+    }
+   ],
+   "title": "Throttle & Brake",
+   "unit": "%",
+   "y": {
+    "fixed": [
+     0.0,
+     100.0
+    ]
+   }
+  },
+  {
+   "id": "motion_suspension",
+   "lines": [
+    {
+     "color": "#FF4444",
+     "k": 18,
+     "label": "FL"
+    },
+    {
+     "color": "#44CCFF",
+     "k": 19,
+     "label": "FR"
+    },
+    {
+     "color": "#FF9900",
+     "k": 20,
+     "label": "RL"
+    },
+    {
+     "color": "#44DD44",
+     "k": 21,
+     "label": "RR"
+    }
+   ],
+   "title": "Suspension",
+   "unit": "norm",
+   "y": {
+    "fixed": [
+     0.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "id": "motion_speed",
+   "lines": [
+    {
+     "color": "#44CCFF",
+     "k": 3,
+     "label": "Speed"
+    }
+   ],
+   "title": "Speed",
+   "unit": "km/h",
+   "y": {
+    "floor": [
+     0.0,
+     350.0
+    ]
+   }
+  }
+ ],
+ "epoch": 1,
+ "hist": 300,
+ "lab": {
+  "cls": {
+   "0": "D",
+   "1": "C",
+   "2": "B",
+   "3": "A",
+   "4": "S1",
+   "5": "S2",
+   "6": "X",
+   "7": "X"
+  },
+  "drv": {
+   "0": "FWD",
+   "1": "RWD",
+   "2": "AWD"
+  },
+  "gear": {
+   "0": "R",
+   "1": "N",
+   "10": "9",
+   "2": "1",
+   "3": "2",
+   "4": "3",
+   "5": "4",
+   "6": "5",
+   "7": "6",
+   "8": "7",
+   "9": "8"
+  },
+  "grp": {
+   "0": "Cars",
+   "1": "Trucks",
+   "2": "Buggies",
+   "3": "Drift",
+   "4": "Rally",
+   "5": "Track Day",
+   "6": "Formula"
+  }
+ },
+ "resume": false,
+ "rg": {},
+ "tick": 30.0,
+ "ui": {
+  "bars": [
+   {
+    "danger": 0.5,
+    "key": "TireSlipRatio",
+    "label": "Slip Ratio",
+    "max": 2.0
+   },
+   {
+    "danger": 0.5,
+    "key": "TireSlipAngle",
+    "label": "Slip Angle",
+    "max": 2.0
+   },
+   {
+    "danger": 1.0,
+    "key": "TireCombinedSlip",
+    "label": "Comb. Slip",
+    "max": 3.0
+   },
+   {
+    "danger": 0.9,
+    "key": "SuspNorm",
+    "label": "Susp (norm)",
+    "max": 1.0
+   }
+  ],
+  "classColors": {
+   "A": "#E3412F",
+   "B": "#F28C1E",
+   "C": "#F2C230",
+   "D": "#3DB1E6",
+   "S1": "#9B4DCA",
+   "S2": "#3D6FE0",
+   "X": "#43B04A"
+  },
+  "inputs": [
+   {
+    "danger": 90,
+    "key": "AccelPct",
+    "label": "Throttle",
+    "max": 100
+   },
+   {
+    "danger": 90,
+    "key": "BrakePct",
+    "label": "Brake",
+    "max": 100
+   },
+   {
+    "danger": 90,
+    "key": "ClutchPct",
+    "label": "Clutch",
+    "max": 100
+   },
+   {
+    "danger": 90,
+    "key": "HandBrakePct",
+    "label": "Handbrake",
+    "max": 100
+   },
+   {
+    "danger": 20,
+    "key": "BoostPsi",
+    "label": "Boost",
+    "max": 30,
+    "slow": true
+   },
+   {
+    "danger": 20,
+    "invert": true,
+    "key": "FuelPct",
+    "label": "Fuel",
+    "max": 100
+   }
+  ],
+  "steerDeadPct": 3.94,
+  "temp": [
+   [
+    50.0,
+    "#1a6fb5"
+   ],
+   [
+    70.0,
+    "#00AACC"
+   ],
+   [
+    90.0,
+    "#22BB44"
+   ],
+   [
+    110.0,
+    "#FF9900"
+   ],
+   [
+    999.0,
+    "#DD2200"
+   ]
+  ],
+  "wheel": {
+   "FL": "#FF4444",
+   "FR": "#44CCFF",
+   "RL": "#FF9900",
+   "RR": "#44DD44"
+  }
+ },
+ "v": 1
+}

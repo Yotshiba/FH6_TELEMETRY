@@ -46,6 +46,42 @@ gaming PC then does no dashboard work at all.
    three live charts without scrolling. The **⛶** button toggles fullscreen (Android/desktop);
    on iPhone use *Share → Add to Home Screen* for a chrome-less view.
 
+## What's in the page
+
+| Tab | What it does |
+|---|---|
+| **Cockpit** | Analogue speedo + tacho that glide, 15 F1-style **shift lights**, a **steering wheel that turns**, pedal bars, a big gear read-out and a **live lap delta** vs. your best lap. Portrait phones get a single big rev dial. |
+| **Dash** | The compact one-screen landscape view (speed, gear, RPM, pedals, tyres, 3 charts). |
+| **Map** | Your **track drawn live from the car's position**, coloured by speed, with lap flags, a scale bar, *Fit / Follow / North-up* and zoom. |
+| **Lab** | **Drag meter** (0–60 mph, 0–100, 0–200, 100–200 km/h, ¼ mile with trap speed, 100–0 and 60–0 braking distances — arm by stopping, then launch), a **G-force circle** with peaks, a **drift score** with combo multiplier, **air-time** counter, session / lifetime **records**, an attitude horizon + compass and the **trophy room**. |
+| **Chassis** | A top-down car: tyres coloured by temperature, steering angle, suspension bars, a weight-transfer ball, brake lights, exhaust flames at the limiter, a lift-off when airborne. |
+| **Rewind** | The last ~5 minutes at full rate in four strips. Drag to look back, wheel/buttons to zoom, tap for a read-out, **★ Mark** a moment, **⬇ CSV** to export the recording. |
+| Race Status · Car & Lap · Tyres · Engine · Inputs · Motion | The six desktop windows. |
+
+**Gimmicks (all optional, in ⚙ Settings):** six themes (Neon, Carbon, Retro CRT, Synthwave,
+Daylight, Stealth); unit toggles (km/h ⇄ mph, °C ⇄ °F, bar ⇄ psi, hp ⇄ kW ⇄ PS, Nm ⇄ lb-ft, km ⇄ mi);
+**engine sound** synthesised from the RPM (plus turbo whistle, blow-off, tyre squeal, kerb rumble and a shift beep);
+**voice call-outs** ("Two hundred kilometres an hour", lap times, low fuel, hot tyres); **phone vibration** for
+kerbs, impacts and landings; speed-lines, a redline vignette and screen shake; confetti for big unlocks;
+a **HUD mirror** mode for a windshield; a **keep-screen-awake** switch; 25 **achievements**; a
+**shareable session card** (PNG with your track, records and trophies). Try the Konami code. 😉
+
+Your records, personal bests and trophies are stored **in that browser only** (`localStorage`) and never leave
+the device. *Settings → Reset lifetime stats* erases them.
+
+> Browsers only allow **sound and vibration after a tap**, so those start muted — tap *Sound* in the Cockpit.
+> iPhones have no Vibration API. Drag-meter times use the game's own clock, so they are accurate even when
+> Wi-Fi is jittery.
+
+### Trying it without the game
+
+```bash
+python tools/fake_forza.py --scenario showcase      # drag run, braking test, then three drifting laps with jumps
+python -m fh6_telemetry --headless                  # in another terminal; then open the URL it prints
+```
+
+The `showcase` scenario exercises every tab above (drag meter, lap delta, drift, air-time, track map).
+
 ## If the page does not load
 
 The PC must accept the connection, and the phone must be able to reach the PC.

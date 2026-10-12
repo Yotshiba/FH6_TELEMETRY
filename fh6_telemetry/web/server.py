@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import mimetypes
+import os
 import queue
 import select
 import socket
@@ -54,6 +55,7 @@ _SECURITY_HEADERS = (
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 class WebBindError(OSError):
@@ -190,7 +192,11 @@ class _Handler(BaseHTTPRequestHandler):
         if not _allowed_peer(self.client_address[0]):
             self._plain(403, b"forbidden: LAN clients only", head_only=head_only)
             return
-        url = urlsplit(self.path)
+        try:
+            url = urlsplit(self.path)
+        except ValueError:                              # e.g. an invalid IPv6 literal in the request target
+            self._plain(400, b"bad request", head_only=head_only)
+            return
         path = url.path
         if path == "/stream":
             if head_only:
@@ -203,7 +209,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._plain(200, self.web.snapshot_json().encode(), "application/json",
                         head_only=head_only)
         else:
-            asset = self.web.assets.get("/index.html" if path == "/" else path)
+            asset = self.web.get_asset("/index.html" if path == "/" else path)
             if asset is None:
                 self._plain(404, b"not found", head_only=head_only)
                 return
@@ -305,6 +311,8 @@ class WebServer:
         self.history_len = history_len
         self.static_dir = Path(static_dir) if static_dir else Path(__file__).parent / "static"
         self.assets: dict[str, tuple[bytes, str, str]] = {}
+        # FH6_WEB_DEV=1: re-read files from disk on every request (edit, reload, repeat)
+        self.dev = bool(os.environ.get("FH6_WEB_DEV"))
 
         self._lock = threading.Lock()
         self._clients: list[_Client] = []
@@ -346,12 +354,18 @@ class WebServer:
                 rel = path.relative_to(root).as_posix()
                 body = path.read_bytes()
                 ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"
-                if ctype.startswith("text/") or ctype in ("application/json",):
+                if ctype.startswith("text/") or ctype in ("application/json", "application/manifest+json"):
                     ctype += "; charset=utf-8"
                 etag = '"' + hashlib.sha1(body).hexdigest()[:16] + '"'
                 key = "/index.html" if rel == "index.html" else f"/static/{rel}"
                 assets[key] = (body, ctype, etag)
         self.assets = assets
+
+    def get_asset(self, key: str):
+        """The (body, content-type, etag) for a URL path, or None."""
+        if self.dev:
+            self._load_assets()
+        return self.assets.get(key)
 
     def start(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> int:
         """Bind and serve.  Returns the bound port.  Raises :class:`WebBindError`."""

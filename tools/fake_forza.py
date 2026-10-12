@@ -374,10 +374,20 @@ class _Track:
 
 
 class ShowcaseCar:
-    """Deterministic demo session: drag run -> braking test -> N laps -> repeat."""
+    """Deterministic demo session: drag run -> braking test -> N laps -> repeat.
+
+    Scene changes (new phase, teleport between the strip and the circuit) start with ``PAUSE_S`` of
+    ``IsRaceOn = 0``, like the game's menus; while ``IsRaceOn`` is 1 the speed is always continuous
+    (the car launches from rest at the start of the drag run and of the laps).
+    """
 
     LAPS = 3
     IDLE_S = 3.0
+    PAUSE_S = 0.4                # IsRaceOn = 0 at the start of idle / idle2 / lap
+    FINISH_S = 0.5               # LapNumber shows LAPS + 1 this long after the chequered flag
+    REFUEL_BELOW = 0.3           # pit stop (after the laps) once the tank is below this
+    HEAT_MAX = 2.0               # soft cap of the instantaneous tyre load (drift corners would run away)
+    SLIP_HEAT = 2.0              # tyre load per radian of slip angle
 
     def __init__(self, seed: int = 1) -> None:
         self.rng = random.Random(seed)
@@ -388,8 +398,10 @@ class ShowcaseCar:
         self.v = 0.0
         self.s = 0.0
         self.dist = 0.0              # drag-strip distance
-        self.odometer = 0.0
+        self.odometer = 0.0          # DistanceTraveled: only ever increases
+        self._fuel_odo = 0.0         # odometer at the last refuel (fuel is burnt from here)
         self.gi = 0
+        self._launch_rpm = 0.0       # revs held by the slipping clutch while launching in first gear
         self.shift_cut = 0.0
         self.lap = 0
         self.lap_t = 0.0
@@ -410,7 +422,8 @@ class ShowcaseCar:
     def _gear_rpm(self, v: float, throttle: float, braking: bool):
         if v < 1.0:
             self.gi = 0
-            return 0, 900.0 + 5200.0 * throttle
+            self._launch_rpm = 900.0 + 5200.0 * throttle     # revs set by the throttle, clutch slipping
+            return 0, self._launch_rpm
         gi = self.gi
         rpm = v * _RATIOS[gi] / _K_SPEED
         while rpm > 8300 and gi < len(_RATIOS) - 1:
@@ -421,6 +434,15 @@ class ShowcaseCar:
             gi -= 1
             rpm = v * _RATIOS[gi] / _K_SPEED
         self.gi = gi
+        # A launch holds its revs in first gear until the road speed catches up (no cliff to idle revs
+        # at 1 m/s); the hold ends at the first moment the natural revs overtake it or the throttle lifts.
+        if self._launch_rpm and gi == 0 and throttle > 0 and not braking:
+            if rpm < self._launch_rpm:
+                rpm = self._launch_rpm
+            else:
+                self._launch_rpm = 0.0
+        else:
+            self._launch_rpm = 0.0
         return gi, min(8500.0, max(900.0, rpm))
 
     def values(self, t: float) -> dict:
@@ -440,13 +462,19 @@ class ShowcaseCar:
 
         if self.phase in ("idle", "idle2"):
             self.v = 0.0
+            if self.lap and self.phase_t > self.FINISH_S:      # the chequered flag is over
+                self.lap = 0
             if self.phase_t > self.IDLE_S:
                 nxt = "drag" if self.phase == "idle" else "lap"
                 self.phase, self.phase_t = nxt, 0.0
-                if nxt == "lap":                              # teleport to the circuit start
-                    self.s, self.v, self.laps_done, self.lap, self.lap_t = 0.0, 18.0, 0, 1, 0.0
+                if nxt == "lap":                              # teleport to the circuit's grid
+                    self.s, self.v, self.laps_done, self.lap, self.lap_t = 0.0, 0.0, 0, 1, 0.0
                     self._prev_s = 0.0
-                    self.gi = 2
+                    self.gi = 0
+                    self.delta = 0.0
+                    # a new session: no lap times from the previous one (a stale LastLap on the
+                    # LapNumber 0 -> 1 edge would read as a finished "lap 0")
+                    self.last_lap = self.best_lap = 0.0
                 else:
                     self.dist = 0.0
         elif self.phase == "drag":
@@ -471,13 +499,19 @@ class ShowcaseCar:
             if self.v <= 0.0 and self.phase_t > 0.5:
                 self.phase, self.phase_t = "idle2", 0.0
         else:  # lap
+            # on the grid with the revs up until the (IsRaceOn = 0) scene change is over, then a
+            # standing start: the speed is continuous from 0 and the drag meter never re-arms
+            holding = self.phase_t < self.PAUSE_S
             # look a little ahead so braking starts on time (the profile already
             # respects the braking limit, a lagging controller would overshoot corners)
             target = min(tr.lerp(tr.profile, self.s),
                          tr.lerp(tr.profile, self.s + self.v * 0.25),
                          tr.lerp(tr.profile, self.s + self.v * 0.5))
             a = max(-14.0, min(8.0, (target - self.v) / 0.1))
-            self.v = max(8.0, self.v + a * dt)
+            if holding:
+                a, self.v = 0.0, 0.0
+            else:
+                self.v = max(8.0 if self.v >= 8.0 else 0.0, self.v + a * dt)   # no floor while launching
             if self.shift_cut > 0:
                 self.shift_cut -= dt
             self.s += self.v * dt
@@ -491,11 +525,17 @@ class ShowcaseCar:
                 self.lap += 1
                 self.lap_t = 0.0
                 if self.laps_done >= self.LAPS:
+                    # Chequered flag: back to the strip. The counter stays at LAPS + 1 (with LastLap
+                    # = the final lap) for FINISH_S, long enough for a 10 Hz client to see the last
+                    # lap complete, then drops to 0 in the idle branch.
                     self.phase, self.phase_t = "idle", 0.0
-                    self.v, self.lap, self.dist = 0.0, 0, 0.0
-            self.lap_t += dt
+                    self.v, self.dist = 0.0, 0.0
+                    if 1.0 - (self.odometer - self._fuel_odo) * 2.5e-5 < self.REFUEL_BELOW:
+                        self._fuel_odo = self.odometer                    # pit stop in the paused scene
+            if not holding:
+                self.lap_t += dt
             kappa = tr.lerp(tr.kappa, self.s)
-            throttle = 1.0 if a > 0.5 else (0.25 if a > -1.5 else 0.0)
+            throttle = 1.0 if (a > 0.5 or holding) else (0.25 if a > -1.5 else 0.0)
             brake = min(1.0, max(0.0, -a / 12.0)) if a < -1.5 else 0.0
             lat_g = self.v * self.v * kappa / _G
             long_g = a / _G
@@ -503,6 +543,8 @@ class ShowcaseCar:
             # drift zones: oversteer through the tight corners
             want = math.copysign(min(0.55, max(0.0, (abs(kappa) - 0.010) * 45.0)), kappa)
             self.delta += (want - self.delta) * min(1.0, dt / 0.25)
+            if self.phase != "lap":
+                self.delta = 0.0                                  # chequered flag: no slide at a standstill
             vx = -self.v * math.sin(self.delta)
             # the jump
             if self.air_start is None and self._prev_s < self.jump_s <= self.s:
@@ -554,8 +596,11 @@ class ShowcaseCar:
         slip_angle = {w: 0.08 * lat_g * (1.0 if w[0] == "F" else 0.9)
                       + drift * (1.6 if w[0] == "R" else 0.5) for w in _WHEELS}
         for i, w in enumerate(_WHEELS):
-            heat = abs(lat_g) * 0.9 + abs(slip_angle[w]) * 6 + slip_ratio * 5 + brake * 0.8
-            self.tire_f[i] += (heat * 9.0 - (self.tire_f[i] - 125.0) * 0.012) * dt
+            heat = abs(lat_g) * 0.9 + abs(slip_angle[w]) * self.SLIP_HEAT + slip_ratio * 5 + brake * 0.8
+            heat = self.HEAT_MAX * math.tanh(heat / self.HEAT_MAX)      # soft cap: big slides don't run away
+            # settles near 125 °F + 90 °F per unit of average load: ~55 °C cold, ~105 °C (front) to ~110 °C
+            # (rear, which slides more) after a few laps; the red band (>110 °C) is only brushed
+            self.tire_f[i] += (heat * 1.8 - (self.tire_f[i] - 125.0) * 0.02) * dt
         torque = 0.0 if (v < 1 and throttle == 0) else (
             380.0 * (0.55 + 0.45 * math.sin(math.pi * min(1.0, rpm / 9000.0)))
         ) * (1.0 if throttle > 0 else -0.15)
@@ -563,8 +608,10 @@ class ShowcaseCar:
         self.steer_f += (steer - self.steer_f) * min(1.0, dt / 0.08)
 
         out: dict = {
-            "IsRaceOn": 0 if (self.phase in ("idle", "idle2") and self.phase_t < 0.4) else 1,
-            "TimestampMS": int(t * 1000) & 0xFFFFFFFF,
+            "IsRaceOn": 0 if (self.phase in ("idle", "idle2", "lap") and self.phase_t < self.PAUSE_S) else 1,
+            # Like the real game: the stamp follows a ~15.6 ms clock tick while rows arrive every
+            # ~13 ms, so equal consecutive timestamps are common.
+            "TimestampMS": int(math.floor(t * 1000 / 15.625) * 15.625) & 0xFFFFFFFF,
             "EngineMaxRpm": 8500.0, "EngineIdleRpm": 900.0, "CurrentEngineRpm": rpm,
             "AccelerationX": lat_g * _G + self.rng.uniform(-0.15, 0.15),
             "AccelerationY": (-_G if air else 0.0) + 28.0 * slam + self.rng.uniform(-0.2, 0.2),
@@ -578,12 +625,12 @@ class ShowcaseCar:
             "PositionX": px, "PositionY": pos_y, "PositionZ": pz,
             "Speed": v, "Power": power, "Torque": torque,
             "Boost": 18.0 * throttle * min(1.0, rpm / 6500.0) - (2.0 if throttle == 0 else 0.0),
-            "Fuel": max(0.0, 1.0 - self.odometer * 2.5e-5),
+            "Fuel": max(0.0, 1.0 - (self.odometer - self._fuel_odo) * 2.5e-5),
             "DistanceTraveled": self.odometer,
             "BestLap": self.best_lap, "LastLap": self.last_lap,
             "CurrentLap": self.lap_t if self.phase == "lap" else 0.0,
             "CurrentRaceTime": self.race_time,
-            "LapNumber": self.lap if self.phase == "lap" else 0, "RacePosition": 3,
+            "LapNumber": self.lap, "RacePosition": 3,
             "Accel": throttle * 255, "Brake": brake * 255, "Clutch": 0, "HandBrake": 0,
             "Gear": gear_i + 2 if v >= 1.0 else 1,
             "Steer": 127 * self.steer_f,

@@ -6,7 +6,8 @@ import math
 
 import pytest
 
-from fh6_telemetry.core.derive import bar_color, gear_label, get_temp_color
+from fh6_telemetry.constants import GEAR_MAP
+from fh6_telemetry.core.derive import bar_color, display_channels, gear_label, get_temp_color, sideslip_deg
 from fh6_telemetry.telemetry import secs_to_time
 
 
@@ -58,3 +59,55 @@ def test_gear_label_holds_previous_for_unknown_transient():
     assert gear_label(0) == "R" and gear_label(1) == "N" and gear_label(2) == "1"
     assert gear_label(11, previous="5") == "5"      # shift transient
     assert gear_label(11) == "11"                   # nothing to hold: show raw
+
+
+# --- sideslip (drift angle) ------------------------------------------------------------------------------------
+
+FIRST_GEAR = next(code for code, label in GEAR_MAP.items() if label == "1")
+NEUTRAL = next(code for code, label in GEAR_MAP.items() if label == "N")
+REVERSE = next(code for code, label in GEAR_MAP.items() if label == "R")
+
+
+def _car_frame(angle_deg: float, speed: float = 22.0) -> tuple[float, float]:
+    """(VelocityX, VelocityZ) of a car travelling *angle_deg* away from where its nose points (+ = to the right)."""
+    a = math.radians(angle_deg)
+    return speed * math.sin(a), speed * math.cos(a)
+
+
+@pytest.mark.parametrize("angle", [0, 10, 30, 60, 85, 89, 91, 100, 120, 150, 170, 179])
+def test_sideslip_reports_the_whole_range_in_forward_gears(angle):
+    """Past 90 degrees it used to snap back to 0, so spin-outs were invisible to the drift scorer."""
+    for sign in (1, -1):
+        vx, vz = _car_frame(sign * angle)
+        assert sideslip_deg(vx, vz, 22.0, FIRST_GEAR) == pytest.approx(sign * angle, abs=1e-9)
+
+
+def test_sideslip_is_continuous_across_90_degrees():
+    below = sideslip_deg(*_car_frame(89.0), 22.0, FIRST_GEAR)
+    above = sideslip_deg(*_car_frame(91.0), 22.0, FIRST_GEAR)
+    assert below == pytest.approx(89.0) and above == pytest.approx(91.0)
+
+
+def test_sideslip_is_zero_at_a_standstill_whatever_the_direction():
+    for angle in (0, 45, 135, 180):
+        vx, vz = _car_frame(angle, 2.9)
+        assert sideslip_deg(vx, vz, 2.9, FIRST_GEAR) == 0.0
+    assert sideslip_deg(0.0, 0.0, 0.0) == 0.0
+    assert sideslip_deg(1.0, 1.0, 3.0, FIRST_GEAR) != 0.0       # 3 m/s is the first speed that counts
+
+
+def test_sideslip_is_zero_in_reverse_but_not_in_neutral():
+    vx, vz = _car_frame(180.0 - 20.0)                           # driving backwards, a little crabbed
+    assert sideslip_deg(vx, vz, 22.0, REVERSE) == 0.0
+    assert sideslip_deg(vx, vz, 22.0, FIRST_GEAR) == pytest.approx(160.0)
+    assert sideslip_deg(vx, vz, 22.0, NEUTRAL) == pytest.approx(160.0)   # rolling backwards in neutral/forward gear
+    assert sideslip_deg(*_car_frame(30.0), 22.0, None) == pytest.approx(30.0)   # gear unknown: assume forward
+
+
+def test_display_channels_passes_the_gear_to_the_sideslip():
+    vx, vz = _car_frame(120.0)
+    t = {"Speed": 22.0, "VelocityX": vx, "VelocityZ": vz, "Gear": FIRST_GEAR}
+    assert display_channels(t)["SideslipDeg"] == pytest.approx(120.0)
+    assert display_channels({**t, "Gear": REVERSE})["SideslipDeg"] == 0.0
+    assert display_channels({k: v for k, v in t.items() if k != "Gear"})["SideslipDeg"] == pytest.approx(120.0)
+    assert display_channels({})["SideslipDeg"] == 0.0           # an empty packet is still safe

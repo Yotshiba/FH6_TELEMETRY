@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 from fh6_telemetry.core.charts import CHARTS
+from fh6_telemetry.core.hub import TelemetryHub
 from fh6_telemetry.web import protocol as P
+from fh6_telemetry.web.server import WebServer
 
 STATIC = Path(__file__).resolve().parent.parent / "fh6_telemetry" / "web" / "static"
 WHEELS = ("FL", "FR", "RL", "RR")
@@ -28,10 +30,35 @@ def test_index_references_only_existing_assets():
         assert (STATIC / ref.removeprefix("/static/")).is_file(), ref
 
 
-def test_every_static_file_is_served_text_utf8():
+def test_text_assets_are_valid_utf8():
+    """The server labels html/css/js ``charset=utf-8``, so that is what they must decode as."""
+    checked = 0
     for path in STATIC.rglob("*"):
-        if path.suffix in {".html", ".css", ".js"}:
+        if path.suffix in {".html", ".css", ".js", ".svg", ".webmanifest"}:
             path.read_text(encoding="utf-8")                  # must be valid UTF-8
+            checked += 1
+    assert checked > 10
+
+
+def test_server_serves_every_static_file_with_the_right_content_type():
+    """Loads the real static directory the way ``WebServer.start`` does (no port is bound)."""
+    server = WebServer(TelemetryHub(capacity=16), static_dir=STATIC)
+    server._load_assets()
+    expect = {
+        ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
+        ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
+        ".webmanifest": "application/manifest+json; charset=utf-8",
+    }
+    seen = set()
+    for path in STATIC.rglob("*"):
+        if path.is_file():
+            key = "/index.html" if path.name == "index.html" else "/static/" + path.relative_to(STATIC).as_posix()
+            body, ctype, _etag = server.get_asset(key)
+            assert body == path.read_bytes(), key
+            if path.suffix in expect:
+                assert ctype == expect[path.suffix], f"{key}: {ctype}"
+                seen.add(path.suffix)
+    assert seen == set(expect), f"no static file covers {sorted(set(expect) - seen)}"
 
 
 def test_js_module_imports_resolve():
@@ -54,8 +81,6 @@ def test_views_only_read_columns_the_server_actually_sends():
         used_f |= {prefix + w for w in WHEELS}
     for prefix in _keys(r"\bS\('(\w+)' \+ w\)", text):
         used_s |= {prefix + w for w in WHEELS}
-    for prefix in _keys(r"\bS\(b\.key \+ w\)", text):          # bars: slip ratio/angle/combined
-        pass
     assert used_f and used_s
     assert used_f <= fast, f"views.js reads unknown fast columns: {sorted(used_f - fast)}"
     assert used_s <= slow, f"views.js reads unknown slow columns: {sorted(used_s - slow)}"

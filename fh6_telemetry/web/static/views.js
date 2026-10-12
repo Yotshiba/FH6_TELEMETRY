@@ -3,6 +3,7 @@
 
 import { LineChart } from './charts.js';
 import { barColor, contrastText, fixed, fmtTime, signed, tempColor } from './format.js';
+import { conv, label } from './units.js';
 
 const WHEELS = ['FL', 'FR', 'RL', 'RR'];
 const MPH_PER_KMH = 0.621371;
@@ -75,7 +76,7 @@ function chartCard(store, charts, id, extra = '') {
   return el;
 }
 
-function hero(store) {
+function hero(store, settings) {
   const n = h('div', 'n', '0'), unit = h('div', 'u', 'km/h'), mph = h('div', 'm', '0 mph');
   const speed = h('div', 'speed'); speed.append(n, unit, mph);
   const g = h('div', 'gear'); const gl = h('small', null, 'GEAR');
@@ -85,8 +86,10 @@ function hero(store) {
     el,
     update() {
       const kmh = store.f('SpeedKmh');
-      setText(n, fixed(kmh, 0));
-      setText(mph, fixed(kmh * MPH_PER_KMH, 0) + ' mph');
+      const u = settings.get('units');
+      setText(n, fixed(conv.speed(kmh, u), 0));
+      setText(unit, label.speed(u));
+      setText(mph, u.speed === 'kmh' ? fixed(kmh * MPH_PER_KMH, 0) + ' mph' : fixed(kmh, 0) + ' km/h');
       if (gnode.data !== store.gear) gnode.data = store.gear;
     },
   };
@@ -108,7 +111,7 @@ function banner(store) {
 
 // ---- view factory ------------------------------------------------------------------
 
-export function buildViews(store) {
+export function buildViews(store, settings) {
   const H = store.hello, lab = H.lab, ui = H.ui;
   const F = (k) => store.f(k), S = (k) => store.s(k);
   const lookup = (map, code, fallback) => map[String(code)] ?? fallback;
@@ -154,7 +157,7 @@ export function buildViews(store) {
 
   // ---- Dash (compact; landscape phones / tablets) ----------------------------------
   make('dash', 'Dash', '#44CCFF', (root, charts, parts) => {
-    const hr = hero(store), ib = bars([
+    const hr = hero(store, settings), ib = bars([
       { label: 'RPM', max: 1, danger: 0.9, invert: false, fmt: (v) => fixed(v * 100, 0) + '%',
         get: () => F('CurrentEngineRpm') / (F('EngineMaxRpm') || 1) },
       { label: 'Throttle', max: 100, danger: 90, invert: false, get: () => F('AccelPct') },
@@ -182,7 +185,7 @@ export function buildViews(store) {
         setText(rpm, rpmText());
         for (const [w, t] of temps) {
           const v = F('TireTemp' + w), bg = tempColor(ui.temp, v);
-          setText(t, `${w}  ${fixed(v, 0)}°`); setCss(t, 'background', bg); setCss(t, 'color', contrastText(bg));
+          setText(t, `${w}  ${fixed(conv.temp(v, settings.get('units')), 0)}°`); setCss(t, 'background', bg); setCss(t, 'color', contrastText(bg));
         }
       },
     });
@@ -190,7 +193,7 @@ export function buildViews(store) {
 
   // ---- Race Status -------------------------------------------------------------------
   make('race', 'Race Status', '#CC88FF', (root, charts, parts) => {
-    const bn = banner(store), hr = hero(store);
+    const bn = banner(store), hr = hero(store, settings);
     const lap = kv([
       ['Lap:', () => String(S('LapNumber'))], ['Position:', () => String(S('RacePosition'))],
       ['Race Time:', () => fmtTime(S('CurrentRaceTimeMs'))], ['Best Lap:', () => fmtTime(S('BestLapMs'))],
@@ -201,7 +204,7 @@ export function buildViews(store) {
       ['Class:', () => lookup(lab.cls, S('CarClass'), '?')], ['PI:', () => String(S('CarPerformanceIndex'))],
       ['Drivetrain:', () => lookup(lab.drv, S('DrivetrainType'), '?')], ['Cylinders:', () => String(S('NumCylinders'))],
     ]);
-    const status = kv([['Boost:', () => fixed(F('BoostBar'), 3) + ' bar'], ['Fuel:', () => fixed(F('FuelPct'), 1) + '%']]);
+    const status = kv([['Boost:', () => { const u = settings.get('units'); return fixed(conv.pressure(F('BoostBar'), u), u.pressure === 'psi' ? 2 : 3) + ' ' + label.pressure(u); }], ['Fuel:', () => fixed(F('FuelPct'), 1) + '%']]);
     const grid = h('div', 'grid');
     grid.append(card(null, bn.el, hr.el), card('Lap & race', lap.el), card('Engine', eng.el),
                 card('Car', car.el), card('Status', status.el));
@@ -220,7 +223,7 @@ export function buildViews(store) {
     const lap = kv([
       ['Best Lap:', () => fmtTime(S('BestLapMs'))], ['Last Lap:', () => fmtTime(S('LastLapMs'))],
       ['Current Lap:', () => fmtTime(S('CurrentLapMs'))], ['Race Time:', () => fmtTime(S('CurrentRaceTimeMs'))],
-      ['Distance:', () => fixed(S('DistanceTraveled') / 1000, 2) + ' km'],
+      ['Distance:', () => { const u = settings.get('units'); return fixed(conv.dist(S('DistanceTraveled'), u), 2) + ' ' + label.dist(u); }],
     ]);
     const ib = inputBars(true);
     const extras = kv([
@@ -251,7 +254,7 @@ export function buildViews(store) {
       return {
         update() {
           const t = F('TireTemp' + w), bg = tempColor(ui.temp, t), flags = S('WheelFlags');
-          setText(temp, fixed(t, 1) + ' °C'); setCss(temp, 'background', bg); setCss(temp, 'color', contrastText(bg));
+          const u = settings.get('units'); setText(temp, fixed(conv.temp(t, u), 1) + ' ' + label.temp(u)); setCss(temp, 'background', bg); setCss(temp, 'color', contrastText(bg));
           setCls(rumble, 'on', !!(flags & (1 << i))); setCls(puddle, 'on', !!(flags & (1 << (4 + i))));
           bs.update(); rows.update();
         },
@@ -270,19 +273,22 @@ export function buildViews(store) {
     const strip = h('div', 'strip');
     const defs = [
       ['RPM', '#FFDD44', () => fixed(F('CurrentEngineRpm'), 0)], ['MAX RPM', '#FF4444', () => fixed(F('EngineMaxRpm'), 0)],
-      ['POWER', '#44CCFF', () => fixed(F('PowerHp'), 1) + ' hp'], ['TORQUE', '#FF9900', () => fixed(F('Torque'), 1) + ' Nm'],
-      ['BOOST', '#44FF88', () => fixed(F('BoostBar'), 3) + ' bar'], ['FUEL', '#FFAA44', () => fixed(F('FuelPct'), 1) + '%'],
+      ['POWER', '#44CCFF', () => { const u = settings.get('units'); return [fixed(conv.power(F('PowerHp'), u), 1), label.power(u)]; }],
+      ['TORQUE', '#FF9900', () => { const u = settings.get('units'); return [fixed(conv.torque(F('Torque'), u), 1), label.torque(u)]; }],
+      ['BOOST', '#44FF88', () => { const u = settings.get('units'); return [fixed(conv.pressure(F('BoostBar'), u), u.pressure === 'psi' ? 2 : 3), label.pressure(u)]; }], ['FUEL', '#FFAA44', () => fixed(F('FuelPct'), 1) + '%'],
       ['GEAR', '#FFFFFF', () => store.gear],
     ];
     const stats = defs.map(([label, color, get]) => {
-      const s = h('div', 'stat'), n = h('div', 'n', '--'), l = h('div', 'l', label);
-      n.style.color = color; s.append(n, l); strip.appendChild(s); return [n, get];
+      const s = h('div', 'stat'), n = h('div', 'n'), v = h('span', 'v', '--'), un = h('span', 'u'), l = h('div', 'l', label);
+      n.style.color = color; n.append(v, un); s.append(n, l); strip.appendChild(s); return [v, un, get];
     });
     const grid = h('div', 'grid');
     grid.append(card(null, strip), chartCard(store, charts, 'engine_rpm'), chartCard(store, charts, 'engine_power_torque'));
     grid.firstChild.classList.add('span-2');
     root.appendChild(grid);
-    parts.push({ update() { for (const [n, get] of stats) setText(n, get()); } });
+    parts.push({ update() {
+      for (const [v, un, get] of stats) { const r = get(); setText(v, Array.isArray(r) ? r[0] : r); setText(un, Array.isArray(r) ? r[1] : ''); }
+    } });
   });
 
   // ---- Inputs ------------------------------------------------------------------------
@@ -300,7 +306,7 @@ export function buildViews(store) {
 
   // ---- Motion ------------------------------------------------------------------------
   make('motion', 'Motion', '#FF9900', (root, charts, parts) => {
-    const hr = hero(store);
+    const hr = hero(store, settings);
     const trio = (label, keys, fmt) => keys.map((k, i) => [label + ' ' + 'XYZ'[i] + ':', () => fmt(S(k))]);
     const vel = kv(trio('Vel', ['VelocityX', 'VelocityY', 'VelocityZ'], (v) => signed(v, 2)));
     const acc = kv(trio('Acc', ['AccelGX', 'AccelGY', 'AccelGZ'], (v) => signed(v, 3)));

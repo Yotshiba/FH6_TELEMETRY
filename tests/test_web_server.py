@@ -137,6 +137,23 @@ def test_unknown_and_traversal_paths_are_404(web, path):
     assert r.status == 404
 
 
+@pytest.mark.parametrize("target", ["http://[::1/x", "http://[bad/x", "https://[fe80::1/"])
+def test_malformed_request_targets_get_400_not_a_traceback(web, target):
+    """urlsplit() raises ValueError on e.g. an unterminated IPv6 literal; that must not escape the handler."""
+    import socket
+
+    with socket.create_connection(("127.0.0.1", web.port), timeout=5) as sock:
+        crlf = chr(13) + chr(10)
+        sock.sendall(("GET " + target + " HTTP/1.0" + crlf + "Host: x" + crlf + crlf).encode())
+        data = b""
+        while chunk := sock.recv(4096):
+            data += chunk
+    assert data.startswith(b"HTTP/1.0 400") or data.startswith(b"HTTP/1.1 400"), data[:80]
+    # and the server is still healthy afterwards
+    r, _ = _get(web.port, "/healthz")
+    assert r.status == 200
+
+
 def test_only_get_and_head_are_supported(web):
     c = http.client.HTTPConnection("127.0.0.1", web.port, timeout=5)
     c.request("POST", "/", body=b"x")

@@ -1,0 +1,112 @@
+/* Themes: every colour in the UI (and in the canvas drawings, via theme.js) comes from
+   these variables.  <html data-theme="..."> selects a set. */
+
+:root {
+  --blue: #3d8bff;
+  --glow: rgba(68, 204, 255, 0.35);
+  --chart-grid: rgba(255, 255, 255, 0.12);
+  --chart-text: #aaaaaa;
+  --chart-title: #8a8aa0;
+  --radius: 8px;
+  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --led-off: #1b1b2c;
+  --needle: #ff4d4d;
+  --bg-image: none;
+}
+html, body { background: var(--bg-image, var(--bg)); background-color: var(--bg); }
+body { font-family: var(--ui-font); }
+.card, .banner, .gear { border-radius: var(--radius); }
+
+/* ---- Carbon ---------------------------------------------------------------------------- */
+html[data-theme="carbon"] {
+  --bg: #111214; --panel: #1b1d20; --panel-2: #15171a; --border: #2d3036;
+  --text: #d9dadc; --bright: #f4f4f4; --dim: #8b8e94; --dimmer: #6c6f76;
+  --accent: #ff7a1a; --green: #3ddc84; --amber: #ffb020; --red: #ff4136; --yellow: #ffd23f;
+  --glow: rgba(255, 122, 26, 0.35); --needle: #ff7a1a; --led-off: #26282c;
+  --bg-image:
+    linear-gradient(27deg, #151618 5px, transparent 5px) 0 5px,
+    linear-gradient(207deg, #151618 5px, transparent 5px) 10px 0,
+    linear-gradient(27deg, #222428 5px, transparent 5px) 0 10px,
+    linear-gradient(207deg, #222428 5px, transparent 5px) 10px 5px,
+    linear-gradient(90deg, #1a1b1e 10px, transparent 10px),
+    linear-gradient(#1d1f22 25%, #1a1b1e 25%, #1a1b1e 50%, transparent 50%, transparent 75%, #242629 75%, #242629);
+}
+html[data-theme="carbon"] { background-size: 20px 20px; }
+
+/* ---- Retro amber CRT ------------------------------------------------------------------------ */
+html[data-theme="amber"] {
+  --bg: #080500; --panel: #120c00; --panel-2: #0c0800; --border: #4a3200;
+  --text: #ffb000; --bright: #ffd060; --dim: #b57a00; --dimmer: #7a5200;
+  --accent: #ffb000; --green: #ffb000; --amber: #ff8a00; --red: #ff4a00; --yellow: #ffd060;
+  --blue: #ffd060; --glow: rgba(255, 176, 0, 0.45); --needle: #ffd060; --led-off: #1a1000;
+  --chart-grid: rgba(255, 176, 0, 0.18); --chart-text: #c78a00; --chart-title: #b57a00;
+  --ui-font: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace; --radius: 3px;
+}
+html[data-theme="amber"] body { text-shadow: 0 0 6px rgba(255, 176, 0, 0.55); }
+html[data-theme="amber"] body::after {            /* CRT scanlines + vignette */
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0, rgba(0, 0, 0, 0.28) 1px, transparent 1px, transparent 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* ---- Synthwave ---------------------------------------------------------------------------------- */
+html[data-theme="synthwave"] {
+  --bg: #12041f; --panel: #1f0a38cc; --panel-2: #170629; --border: #5b2a9a;
+  --text: #f0d9ff; --bright: #ffffff; --dim: #b48ad8; --dimmer: #8a60b5;
+  --accent: #00e5ff; --green: #39ff9a; --amber: #ffb347; --red: #ff2e97; --yellow: #fff35c;
+  --blue: #00e5ff; --glow: rgba(255, 46, 151, 0.5); --needle: #ff2e97; --led-off: #2a1049;
+  --chart-grid: rgba(255, 46, 151, 0.2); --chart-text: #c9a0ee; --chart-title: #b48ad8;
+  --bg-image: linear-gradient(180deg, #12041f 0%, #2a0a4a 55%, #6a1b7a 85%, #ff2e97 100%);
+}
+html[data-theme="synthwave"] body::before {      /* perspective grid horizon */
+  content: ""; position: fixed; left: -20%; right: -20%; bottom: 0; height: 38%; pointer-events: none; z-index: 0;
+  background:
+    linear-gradient(transparent 0, rgba(255, 46, 151, 0.28) 100%),
+    repeating-linear-gradient(90deg, rgba(0, 229, 255, 0.35) 0 1px, transparent 1px 60px),
+    repeating-linear-gradient(0deg, rgba(0, 229, 255, 0.35) 0 1px, transparent 1px 36px);
+  transform: perspective(240px) rotateX(58deg); transform-origin: bottom;
+  mask-image: linear-gradient(transparent, #000 60%);
+}
+html[data-theme="synthwave"] #top, html[data-theme="synthwave"] #views { position: relative; z-index: 1; }
+html[data-theme="synthwave"] .card { backdrop-filter: blur(6px); box-shadow: 0 0 18px rgba(255, 46, 151, 0.18); }
+html[data-theme="synthwave"] .hero .speed .n, html[data-theme="synthwave"] #brand { text-shadow: 0 0 14px var(--glow); }
+
+/* ---- Daylight (sunny-window readable) ----------------------------------------------------------------- */
+html[data-theme="daylight"] {
+  --bg: #eef1f6; --panel: #ffffff; --panel-2: #f5f7fb; --border: #cfd6e4;
+  --text: #1b2433; --bright: #0b1220; --dim: #566179; --dimmer: #7a869e;
+  --accent: #0b63d1; --green: #12a150; --amber: #d98200; --red: #d62d20; --yellow: #c79a00;
+  --blue: #0b63d1; --glow: rgba(11, 99, 209, 0.25); --needle: #d62d20; --led-off: #dde3ee;
+  --chart-grid: rgba(20, 30, 50, 0.14); --chart-text: #566179; --chart-title: #566179;
+  color-scheme: light;
+}
+html[data-theme="daylight"] .bar .t { background: #e4e9f2; border-color: #c4cddd; }
+html[data-theme="daylight"] .gear { background: #f0f3fa; }
+html[data-theme="daylight"] .temp { color: #fff; }
+
+/* ---- Stealth (night driving, red-only) -------------------------------------------------------------------- */
+html[data-theme="stealth"] {
+  --bg: #000000; --panel: #0b0000; --panel-2: #060000; --border: #3a0000;
+  --text: #ff4040; --bright: #ff7070; --dim: #a02020; --dimmer: #701010;
+  --accent: #ff3030; --green: #ff3030; --amber: #ff3030; --red: #ff6060; --yellow: #ff6060;
+  --blue: #ff6060; --glow: rgba(255, 48, 48, 0.4); --needle: #ff6060; --led-off: #1a0000;
+  --chart-grid: rgba(255, 48, 48, 0.18); --chart-text: #c03030; --chart-title: #a02020;
+}
+html[data-theme="stealth"] .temp, html[data-theme="stealth"] .bar .f { filter: saturate(0) sepia(1) hue-rotate(-50deg) saturate(8); }
+
+/* ---- Hyperdrive (Konami easter egg) ----------------------------------------------------------------------------- */
+html[data-theme="hyperdrive"] {
+  --bg: #020010; --panel: #0a0828cc; --panel-2: #05041a; --border: #3b2fb5;
+  --text: #e6e0ff; --bright: #ffffff; --dim: #9d92ff; --dimmer: #6f63d6;
+  --accent: #7df9ff; --green: #7dff9c; --amber: #ffc857; --red: #ff5c8a; --yellow: #fff36b;
+  --blue: #7df9ff; --glow: rgba(125, 249, 255, 0.55); --needle: #fff36b; --led-off: #120d44;
+  --bg-image: radial-gradient(ellipse at 50% 120%, #2b1a7a 0%, #020010 60%);
+  --chart-grid: rgba(125, 249, 255, 0.16); --chart-text: #a99dff; --chart-title: #9d92ff;
+}
+html[data-theme="hyperdrive"] .card { box-shadow: 0 0 20px rgba(125, 249, 255, 0.18), inset 0 0 12px rgba(125, 90, 255, 0.15); animation: hue 8s linear infinite; }
+html[data-theme="hyperdrive"] #brand { animation: hue 4s linear infinite; }
+@keyframes hue { to { filter: hue-rotate(360deg); } }
+
+/* theme chips in the settings drawer */
+.theme-chip { --a: var(--accent); --b: var(--panel); }

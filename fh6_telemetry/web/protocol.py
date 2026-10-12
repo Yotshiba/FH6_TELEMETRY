@@ -32,6 +32,7 @@ from ..constants import (
     _TEMP_COLORS,
     CAR_CLASS,
     CAR_GROUP_MAP,
+    CLASS_COLORS,
     DRIVETRAIN,
     GEAR_MAP,
     HISTORY_LEN,
@@ -59,6 +60,12 @@ FAST: tuple[tuple[str, int, str], ...] = (
     ("SteerPct", 1, "%"),
     *((f"TireTemp{w}", 1, "°C") for w in WHEELS),
     *((f"SuspNorm{w}", 3, "norm") for w in WHEELS),
+    # --- added for the cockpit / map / lab / timeline views ---
+    ("TimestampMS", 0, "ms"),                 # exact game time: precise 0-100 timers, timeline
+    ("AccelGX", 2, "g"), ("AccelGZ", 2, "g"),  # lateral / longitudinal g (G-G diagram)
+    ("SideslipDeg", 1, "°"),                  # drift angle
+    ("Pitch", 3, "rad"), ("Roll", 3, "rad"), ("Yaw", 3, "rad"),
+    ("PositionX", 1, "m"), ("PositionZ", 1, "m"),
 )
 
 FAST_INDEX = {k: i for i, (k, _d, _u) in enumerate(FAST)}
@@ -174,6 +181,7 @@ def static_ui() -> dict:
         "temp": [[t, c] for t, c in _TEMP_COLORS],
         "bars": [{"key": k, "label": label, "max": mx, "danger": dg} for k, label, mx, dg in _BAR_CONFIGS],
         "wheel": dict(WHEEL_COLORS),
+        "classColors": dict(CLASS_COLORS),
         "steerDeadPct": round(5 / 127 * 100, 2),     # the desktop UI's ±5 raw dead zone
         "inputs": [
             {"label": "Throttle", "key": "AccelPct", "max": 100, "danger": 90},

@@ -28,7 +28,7 @@ def test_every_column_key_exists_in_a_frame():
 
 
 def test_column_tables_have_unique_keys_and_match_the_index_maps():
-    assert len({k for k, _d, _u in P.FAST}) == len(P.FAST) == 22
+    assert len({k for k, _d, _u in P.FAST}) == len(P.FAST) == 31
     assert len({k for k, _d, _g in P.SLOW}) == len(P.SLOW)
     assert P.FAST_INDEX["IsRaceOn"] == 0
     assert all(P.FAST[i][0] == k for k, i in P.FAST_INDEX.items())

@@ -163,6 +163,18 @@ function initViews() {
   if (!wanted) { try { wanted = localStorage.getItem('fh6.view') || ''; } catch { /* ignore */ } }
   select(wanted || 'cockpit', false);
   firstRunTip();
+  openSharedCockpit();
+}
+
+/** A link like http://192.168.1.101:8077/?cockpit=FH6-... (a QR code, a message) offers that cockpit layout. */
+function openSharedCockpit() {
+  let code = null;
+  try { code = new URLSearchParams(location.search).get('cockpit'); } catch { /* ignore */ }
+  if (!code) return;
+  try { history.replaceState(null, '', location.pathname + '#cockpit'); } catch { /* sandboxed */ }
+  select('cockpit', false);
+  const cockpit = views.find((v) => v.id === 'cockpit');
+  if (cockpit && cockpit.openLayouts) cockpit.openLayouts({ importText: code });
 }
 
 function firstRunTip() {

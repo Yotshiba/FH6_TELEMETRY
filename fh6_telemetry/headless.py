@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 
-from .core import lowimpact, netinfo
+from .core import lowimpact, netinfo, qr
 from .core.config import Config
 from .core.diagnostics import install_excepthook
 from .core.hub import TelemetryHub
@@ -38,9 +38,39 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--http-port", type=int, help=f"web port (default: saved setting or {DEFAULT_PORT})")
     ap.add_argument("--rate", type=int, choices=(15, 30, 60), help="web update rate in Hz (default 30)")
     ap.add_argument("--no-web", action="store_true", help="receive only; do not start the web server")
+    ap.add_argument("--no-qr", action="store_true", help="do not print the QR code for the dashboard address")
     ap.add_argument("--no-low-impact", action="store_true",
                     help="do not lower this process's priority / enable Windows Efficiency QoS")
     return ap
+
+
+def qr_art(url: str, encoding: str | None = None) -> str:
+    """The dashboard address as terminal art (light modules bright, for a dark console); '' if it can't be drawn.
+
+    Uses half-block characters where the console can print them and plain ``##`` pairs where it cannot (a console
+    in a legacy code page, or output redirected to a file).
+    """
+    try:
+        code = qr.encode(url, "M")
+        if encoding is None:
+            encoding = getattr(sys.stdout, "encoding", None)
+        return qr.to_text(code, border=2, blocks=qr.can_print_blocks(encoding))
+    except Exception:           # a QR code is a convenience: it must never stop the dashboard from starting
+        return ""
+
+
+def print_qr(url: str) -> None:
+    """Print the QR code with a caption; falls back to plain ASCII if the console rejects the block characters."""
+    for encoding in (None, "ascii"):
+        art = qr_art(url, encoding)
+        if not art:
+            return
+        text = "\n  Or scan this with your phone's camera:\n\n" + "\n".join("    " + line for line in art.split("\n"))
+        try:
+            print(text)
+            return
+        except UnicodeEncodeError:
+            continue
 
 
 def main(argv: list[str] | None = None, stop: threading.Event | None = None) -> int:
@@ -79,6 +109,8 @@ def main(argv: list[str] | None = None, stop: threading.Event | None = None) -> 
             print(f"              (also {extra})")
         print("  Open that address in a browser on your phone / tablet (same Wi-Fi).")
         print("  If it does not load: allow the app through Windows Firewall (Private networks).")
+        if not args.no_qr:
+            print_qr(urls[0])
     print("Press Ctrl+C to quit.\n")
 
     stop = stop or threading.Event()

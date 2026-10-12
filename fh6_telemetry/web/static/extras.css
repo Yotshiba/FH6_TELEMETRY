@@ -44,6 +44,33 @@ body { display: block; }
 .pal-item b { font: 700 12px var(--ui-font, system-ui); color: var(--bright); }
 .pal-item span { font: 500 10px var(--ui-font, system-ui); color: var(--dim); }
 .pal-item:hover { border-color: var(--accent); }
+
+/* ---- layouts dialog (save / share / import) ------------------------------------------------------------------------ */
+.layouts-dialog { position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); padding: 10px; }
+.lay-card {
+  width: min(560px, 100%); max-height: 100%; overflow: auto; padding: 14px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); color: var(--text);
+}
+.lay-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.lay-title { font: 800 15px var(--ui-font, system-ui); color: var(--bright); letter-spacing: .5px; }
+.lay-sec { padding: 10px 0; border-top: 1px solid var(--border); }
+.lay-sec h4 { margin: 0 0 8px; font: 800 11px var(--ui-font, system-ui); letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
+.lay-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.lay-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.lay-item { justify-content: space-between; flex-wrap: nowrap; padding: 4px 4px 4px 10px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--border); }
+.lay-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 13px var(--ui-font, system-ui); color: var(--bright); }
+.lay-empty, .lay-msg { font: 500 12px var(--ui-font, system-ui); color: var(--dim); }
+.lay-msg { margin-top: 6px; min-height: 1.2em; }
+.lay-msg.bad { color: var(--red); }
+.lay-input, .lay-code {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel-2); color: var(--bright);
+  font: 600 13px var(--ui-font, system-ui);
+}
+.lay-code { width: 100%; box-sizing: border-box; font: 500 11px var(--mono, monospace); resize: none; word-break: break-all; }
+.lay-share { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.lay-share-side { flex: 1; min-width: 200px; }
+.lay-qr { width: 200px; height: 200px; background: #fff; border-radius: 10px; padding: 6px; box-sizing: content-box; image-rendering: pixelated; }
+@media (max-width: 480px) { .lay-qr { width: 170px; height: 170px; } }
 .map-ctl { left: 10px; top: 10px; max-width: calc(100% - 20px); }
 .map-info { position: absolute; right: 12px; top: 12px; font: 600 11px var(--ui-font, system-ui); color: var(--chart-text); z-index: 3; }
 
@@ -161,3 +188,7 @@ body { display: block; }
   #toasts .toast:nth-last-child(n+3) { display: none; }
   .view.v-timeline { padding: 4px 6px; }
 }
+
+/* ---- settings drawer: QR code ------------------------------------------------------------------------------------------ */
+.dr-qr { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.dr-qr-img { background: #fff; padding: 6px; border-radius: 10px; width: 150px; height: 150px; box-sizing: content-box; image-rendering: pixelated; }

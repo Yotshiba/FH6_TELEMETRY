@@ -28,7 +28,7 @@ export const ctx2d = () => {
 export class El {
   constructor(tag) {
     this.tag = tag; this.children = []; this.listeners = {}; this.className = ''; this.dataset = {}; this.attrs = {};
-    this.textContent = ''; this.width = 300; this.height = 150; this._g = null;
+    this._text = ''; this.width = 300; this.height = 150; this._g = null;
     const css = {};
     this.style = new Proxy(css, {
       get: (t, k) => (k === 'setProperty' ? (n, v) => { t[n] = v; } : t[k] ?? ''),
@@ -45,6 +45,8 @@ export class El {
       contains: (c) => read().has(c),
     };
   }
+  get textContent() { return this._text; }
+  set textContent(v) { this._text = String(v); this.children.length = 0; }          // like the DOM: setting text drops the children
   get firstChild() { return this.children[0] || null; }
   appendChild(n) { this.children.push(n); return n; }
   append(...ns) { ns.forEach((n) => this.children.push(n)); }

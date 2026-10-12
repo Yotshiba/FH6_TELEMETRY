@@ -41,10 +41,14 @@ gaming PC then does no dashboard work at all.
 ## Open it on the phone
 
 1. Phone/tablet on the **same Wi-Fi / router** as the PC.
-2. Open the address shown by the launcher (or printed by headless mode) in the browser.
+2. **Scan the QR code**: the launcher shows one next to the address (click it to switch to another
+   address if the PC has several networks), headless mode prints one in its console, and the page itself
+   has one under *⚙ Settings → Open on another device*. Or type the address by hand.
 3. Landscape phone: the **Dash** tab shows speed, gear, RPM, pedals, tyre temperatures and
    three live charts without scrolling. The **⛶** button toggles fullscreen (Android/desktop);
    on iPhone use *Share → Add to Home Screen* for a chrome-less view.
+
+(`python -m fh6_telemetry --headless --no-qr` skips the console QR code.)
 
 ## What's in the page
 
@@ -71,6 +75,21 @@ On the **Cockpit** tab tap **✎ Edit** (bottom-left). The dash turns into a sna
 | **↶ Undo** | step back (up to 40 changes) |
 | **↺ Reset** | back to the factory layout (tap twice) |
 | **✓ Done** | leave edit mode |
+
+### Save, share and import cockpits (💾 Layouts)
+
+The **💾 Layouts** button (next to ✎ Edit, and in the edit bar) opens a dialog:
+
+* **Saved layouts**: name the dash you have now (*Race*, *Drift* …) and **Load** it any time. Up to 12 are kept in this browser.
+* **Share this cockpit**: a short **code** (`FH6-…`, about 160 characters for both orientations), a **link** and a **QR code**.
+  Scan the QR code with another phone on the same Wi-Fi to load your cockpit there, or send the code / link to a friend
+  (they paste it into *Import*, or open the link).
+* **Import a cockpit**: paste a code or a whole link. A link that is opened (or scanned) shows this dialog with the code
+  already filled in; nothing changes until you press **Import**.
+
+Loading or importing first keeps your current dash as **“Before last change”**, so a mistake is one tap to undo
+(and while editing, *Undo* steps back too). Codes carry a checksum: a cut-off or mistyped code is refused with a
+message, never half-applied, and every layout is validated (sizes clamped to the screen, unknown gauges dropped).
 
 With a keyboard: select a gauge, then **arrow keys** move it, **Shift + arrows** resize it, **Delete** removes it, **Esc** deselects.
 Landscape and portrait have **separate layouts** (turn the phone while editing to edit the other one). Layouts are saved in

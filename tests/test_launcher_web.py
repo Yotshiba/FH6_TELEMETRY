@@ -241,3 +241,59 @@ def test_a_broken_config_file_does_not_stop_the_app(qapp, tmp_path, monkeypatch)
     monkeypatch.setattr(launcher.Config, "load", classmethod(lambda cls, p=None: (_ for _ in ()).throw(RuntimeError("bad"))))
     cfg = launcher.LauncherWindow._load_config()
     assert cfg["udp_port"] == 20077
+
+
+# ---------------------------------------------------------------------------
+# the QR code next to the address
+# ---------------------------------------------------------------------------
+
+
+def _dark_pixel(img, rect) -> bool:
+    c = img.pixelColor(rect.center())
+    return c.red() < 128
+
+
+def test_qr_code_appears_with_the_server_and_encodes_the_shown_address(win, monkeypatch):
+    from fh6_telemetry.core import netinfo, qr as qrmod
+
+    monkeypatch.setattr(netinfo, "lan_candidates", lambda: [
+        netinfo.Candidate("192.168.1.101", "Wi-Fi", "wifi"), netinfo.Candidate("10.0.0.5", "Ethernet", "ethernet"),
+    ])
+    assert win._web_qr.isHidden() and win._web_qr.code is None
+    win._web_check.setChecked(True)
+    port = int(win._web_port_edit.text())
+    first = f"http://192.168.1.101:{port}/"
+    assert not win._web_qr.isHidden()
+    assert win._web_qr.code == qrmod.encode(first, "M")
+    assert first in win._web_qr_lbl.text() and "Click the code" in win._web_qr_lbl.text() and not win._web_qr_lbl.isHidden()
+
+    # what is painted is what the encoder produced: sample the centre of every module of the rendered widget
+    img = win._web_qr.grab().toImage()
+    code = win._web_qr.code
+    wrong = [(x, y) for y in range(code.size) for x in range(code.size)
+             if _dark_pixel(img, win._web_qr.module_rect(x, y)) != code.get(x, y)]
+    assert wrong == []
+    assert not _dark_pixel(img, win._web_qr.module_rect(-2, -2)), "the quiet zone is white"
+
+    win._web_qr.clicked.emit()                                       # click: the next address
+    second = f"http://10.0.0.5:{port}/"
+    assert win._web_qr.code == qrmod.encode(second, "M") and second in win._web_qr_lbl.text()
+    win._web_qr.clicked.emit()
+    assert win._web_qr.code == qrmod.encode(first, "M"), "and round again"
+
+
+def test_qr_code_disappears_when_the_server_stops(win):
+    win._web_check.setChecked(True)
+    assert not win._web_qr.isHidden()
+    win._web_check.setChecked(False)
+    assert win._web_qr.isHidden() and win._web_qr.code is None
+
+
+def test_a_single_address_has_no_switch_hint(win, monkeypatch):
+    from fh6_telemetry.core import netinfo
+
+    monkeypatch.setattr(netinfo, "lan_candidates", lambda: [netinfo.Candidate("192.168.1.7", "Wi-Fi", "wifi")])
+    win._web_check.setChecked(True)
+    assert "Click the code" not in win._web_qr_lbl.text()
+    win._web_qr.clicked.emit()                                       # clicking with one address is harmless
+    assert win._web_qr.code is not None

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import json
 import mimetypes
 import os
 import queue
@@ -31,11 +32,13 @@ import socket
 import socketserver
 import threading
 import time
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from ..constants import HISTORY_LEN
+from ..core import netinfo, qr
 from ..core.diagnostics import log_exception
 from ..core.hub import TelemetryHub
 from . import protocol as P
@@ -52,6 +55,19 @@ _SECURITY_HEADERS = (
      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
      "connect-src 'self'; base-uri 'none'; form-action 'none'"),
 )
+
+_QR_MAX_BYTES = 800            # what /api/qr.svg will encode (a level-L QR code holds 858 bytes at most)
+
+
+@lru_cache(maxsize=64)
+def _qr_svg(data: str) -> bytes:
+    """The QR code of `data` as an SVG document (level M, or L when it does not fit). Cached: the work is ~50 ms."""
+    try:
+        code = qr.encode(data, "M")
+    except ValueError:
+        code = qr.encode(data, "L")
+    return qr.to_svg(code).encode("utf-8")
+
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
@@ -208,6 +224,11 @@ class _Handler(BaseHTTPRequestHandler):
         elif path == "/api/snapshot":
             self._plain(200, self.web.snapshot_json().encode(), "application/json",
                         head_only=head_only)
+        elif path == "/api/qr.svg":
+            self._qr(url.query, head_only)
+        elif path == "/api/urls":
+            self._plain(200, json.dumps({"urls": self.web.advertised_urls()}).encode(), "application/json",
+                        head_only=head_only)
         else:
             asset = self.web.get_asset("/index.html" if path == "/" else path)
             if asset is None:
@@ -229,6 +250,33 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             if not head_only:
                 self.wfile.write(body)
+
+    def _qr(self, query: str, head_only: bool) -> None:
+        """GET /api/qr.svg?d=<text>: the QR code for `d` (used for the dashboard address and shared layouts)."""
+        try:
+            data = (parse_qs(query, max_num_fields=8).get("d") or [""])[0]
+        except ValueError:                                  # too many fields
+            self._plain(400, b"bad query", head_only=head_only)
+            return
+        if not data:
+            self._plain(400, b"missing d", head_only=head_only)
+            return
+        if len(data.encode("utf-8", "replace")) > _QR_MAX_BYTES:
+            self._plain(413, b"too long for a QR code", head_only=head_only)
+            return
+        try:
+            body = _qr_svg(data)
+        except ValueError:
+            self._plain(413, b"too long for a QR code", head_only=head_only)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=3600")       # the same text always gives the same image
+        self._headers()
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(body)
 
     # -- SSE ---------------------------------------------------------------
     def _peer_gone(self) -> bool:
@@ -327,6 +375,23 @@ class WebServer:
         self._slots = threading.BoundedSemaphore(32)
         self._httpd: _HTTPServer | None = None
         self._threads: list[threading.Thread] = []
+
+    def advertised_urls(self) -> list[str]:
+        """The addresses another device on the LAN can open (best first); cached for a few seconds."""
+        now = time.monotonic()
+        cached = getattr(self, "_urls_cache", None)
+        bound = self.bound
+        if cached and now - cached[0] < 5.0 and cached[2] == bound:
+            return list(cached[1])
+        port = bound[1] if bound else DEFAULT_PORT
+        try:
+            urls = [c.url(port) for c in netinfo.lan_candidates()]
+        except Exception as exc:        # pragma: no cover - netinfo never raises, but a page must not depend on it
+            log_exception("advertised_urls", exc)
+            urls = []
+        urls = urls or [f"http://127.0.0.1:{port}/"]
+        self._urls_cache = (now, urls, bound)
+        return list(urls)
 
     # -- state ------------------------------------------------------------
     @property

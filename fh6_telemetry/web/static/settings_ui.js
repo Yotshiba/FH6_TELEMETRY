@@ -2,6 +2,8 @@
 // setting changes (from anywhere: a cockpit button, the Konami code, another control).
 
 import { on } from './bus.js';
+import { copyText } from './clipboard.js';
+import { isLoopbackHost, qrSrc, resolveShareOrigin } from './share_origin.js';
 import { THEMES } from './settings.js';
 import { UNIT_CHOICES } from './units.js';
 
@@ -120,6 +122,37 @@ export function buildDrawer(root, ctx) {
   toggle('keepAwake', 'Keep screen on (no sleep / screen saver)', sc, 'Uses the Wake Lock API, or a tiny hidden video over plain http://. Phones need one tap first.');
   if (document.fullscreenEnabled) button(sc, '⛶ Toggle fullscreen', () => actions.fullscreen());
   sc.appendChild(h('div', 'dr-note', 'If the ☀ button in the top bar stays orange, this browser refused: set the device\'s auto-lock / screen saver to Never.'));
+
+  // ---- open on another device (QR code) ----------------------------------------------------------------------------------------------
+  const od = section('Open on another device');
+  const qrBox = h('div', 'dr-qr');
+  const qrImg = h('img', 'dr-qr-img');
+  qrImg.alt = 'QR code of this dashboard’s address'; qrImg.width = 150; qrImg.height = 150;
+  qrImg.style.display = 'none';
+  const qrCap = h('div', 'dr-note', 'Looking for this PC’s address…');
+  qrBox.append(qrImg, qrCap);
+  od.appendChild(qrBox);
+  let address = '';
+  const copyAddr = button(od, 'Copy address', async () => {
+    if (!address) return;
+    const ok = await copyText(address);
+    copyAddr.textContent = ok ? 'Copied ✓' : 'Select the address above and copy it';
+    setTimeout(() => { copyAddr.textContent = 'Copy address'; }, 2500);
+  });
+  copyAddr.style.display = 'none';
+  resolveShareOrigin().then((origin) => {
+    if (!origin) { qrCap.textContent = 'Could not work out this dashboard’s network address.'; return; }
+    address = origin + '/';
+    let local = false;
+    try { local = isLoopbackHost(new URL(origin).hostname); } catch { /* keep false */ }
+    qrImg.onerror = () => { qrImg.style.display = 'none'; };
+    qrImg.src = qrSrc(address);
+    qrImg.style.display = '';
+    copyAddr.style.display = '';
+    qrCap.textContent = local
+      ? `${address}  (this address only works on this PC: the network address could not be found)`
+      : `Scan with a phone on the same Wi-Fi to open ${address}`;
+  });
 
   // ---- data ---------------------------------------------------------------------------------------------------------------------------------
   const da = section('Data');

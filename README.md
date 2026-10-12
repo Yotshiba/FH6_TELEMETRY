@@ -29,7 +29,7 @@ Each category opens as an independent floating window that can be freely moved a
 | **Motion** | Speed/gear display + velocity, acceleration, orientation, position data + suspension & speed charts |
 
 - **Web dashboard** — the same six categories in a browser, plus a compact **Dash** view that fits a landscape phone on one screen ([guide](docs/web-dashboard.md))
-- **A bit gimmicky** — in the browser: a **Cockpit you can rebuild yourself** (20 gauges: add, remove, move, resize; separate phone-portrait and landscape layouts) with shift lights and a turning wheel, a live **track map**, a **Lab** (drag meter, G-force circle, drift score, air-time, records, 25 achievements), a top-down **Chassis** view, a 5-minute **Rewind** timeline with CSV export, six themes, unit toggles, synthesised engine sound, voice call-outs, phone haptics and a shareable session card ([tour](docs/web-dashboard.md#whats-in-the-page))
+- **A bit gimmicky** — in the browser: a **Cockpit you can rebuild yourself** (20 gauges: add, remove, move, resize; separate phone-portrait and landscape layouts; save, share by code / link / QR code, import) with shift lights and a turning wheel, a live **track map**, a **Lab** (drag meter, G-force circle, drift score, air-time, records, 25 achievements), a top-down **Chassis** view, a 5-minute **Rewind** timeline with CSV export, six themes, unit toggles, synthesised engine sound, voice call-outs, phone haptics and a shareable session card ([tour](docs/web-dashboard.md#whats-in-the-page))
 - **Light on your game** — the display refreshes on a timer (10–60 Hz, default 20) instead of per packet; hidden/minimised windows cost almost nothing; optional *low-impact mode* lowers the dashboard's priority
 - **Stable charts** — the Y axis only changes when it has to (no constant re-scaling when values fluctuate)
 - **Unit conversions**: boost in bar, power in hp, speed in km/h + mph, tyre temps in °C (converted from FH6's Fahrenheit broadcast)
@@ -70,7 +70,7 @@ Each category opens as an independent floating window that can be freely moved a
 
 ## Web dashboard (phone / tablet / another PC)
 
-In the launcher tick **Web dashboard**. It shows an address such as `http://192.168.1.101:8077/` — open it in a browser on any device on the same Wi-Fi. It is **off by default** and only answers devices on your local network.
+In the launcher tick **Web dashboard**. It shows an address such as `http://192.168.1.101:8077/` and a **QR code**: scan it with your phone's camera (or open the address in a browser on any device on the same Wi-Fi). It is **off by default** and only answers devices on your local network.
 
 For the lowest impact on the gaming PC, run **headless** (no windows at all):
 

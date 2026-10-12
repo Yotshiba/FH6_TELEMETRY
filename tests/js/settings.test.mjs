@@ -97,7 +97,7 @@ test('prototype-polluting paths are refused', () => {
 });
 
 test('cockpit layouts: stored per orientation, validated on load, null means the factory layout', () => {
-  assert.deepEqual(defaults().cockpit, { landscape: null, portrait: null });
+  assert.deepEqual(defaults().cockpit, { landscape: null, portrait: null, presets: [] });
   const st = memoryStorage();
   const s = new Settings(st);
   const mine = [{ id: 'gear', type: 'gear', x: 3, y: 3, w: 6, h: 6 }];
@@ -112,7 +112,7 @@ test('cockpit layouts: stored per orientation, validated on load, null means the
   const b = new Settings(bad);
   assert.equal(b.get('cockpit.landscape'), null);
   assert.deepEqual(b.get('cockpit.portrait'), [{ id: 'speedo', type: 'speedo', x: 0, y: 0, w: 18, h: 32 }]);
-  assert.deepEqual(sanitize({ cockpit: 5 }).cockpit, { landscape: null, portrait: null });
+  assert.deepEqual(sanitize({ cockpit: 5 }).cockpit, { landscape: null, portrait: null, presets: [] });
   assert.deepEqual(sanitize({ cockpit: { landscape: [], portrait: null } }).cockpit.landscape, []);
 });
 

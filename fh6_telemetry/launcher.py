@@ -36,6 +36,7 @@ from .core.udp_source import UdpBindError, UdpSource
 from .style import _DARK_STYLE
 from .web.server import WebBindError, WebServer
 from .widgets import rolling_chart
+from .widgets.qr_widget import QrWidget
 from .windows.car_lap_window import CarLapWindow
 from .windows.category_window import CategoryWindow
 from .windows.engine_window import EngineWindow
@@ -95,12 +96,15 @@ _REFRESH_CHOICES = (10, 15, 20, 30, 60)
 class LauncherWindow(QMainWindow):
     """Compact control panel — toggle category windows, monitor connection."""
 
+    _WIDTH = 430                # the window is fixed-width; it widens while the QR code is showing
+    _WIDTH_WITH_QR = 580
+
     def __init__(self, config: Config | None = None) -> None:
         super().__init__()
         self._config = config if config is not None else self._load_config()
         rolling_chart.set_default_style(str(self._config["chart_style"]))
         self.setWindowTitle("FH6 Telemetry — Launcher")
-        self.setFixedWidth(430)
+        self.setFixedWidth(self._WIDTH)
         self.setStyleSheet(_DARK_STYLE)
 
         central = QWidget()
@@ -231,6 +235,8 @@ class LauncherWindow(QMainWindow):
         )
         body.addWidget(web_lbl)
 
+        web_left = QVBoxLayout()                    # the web controls; the QR code sits to their right
+        web_left.setSpacing(6)
         web_row = QHBoxLayout()
         web_row.setSpacing(6)
         self._web_check = QCheckBox("Enable (phone / tablet / other PC)")
@@ -244,7 +250,7 @@ class LauncherWindow(QMainWindow):
         web_row.addWidget(self._web_check, stretch=1)
         web_row.addWidget(wport_lbl)
         web_row.addWidget(self._web_port_edit)
-        body.addLayout(web_row)
+        web_left.addLayout(web_row)
 
         url_row = QHBoxLayout()
         url_row.setSpacing(6)
@@ -260,11 +266,28 @@ class LauncherWindow(QMainWindow):
         url_row.addWidget(self._web_url_lbl, stretch=1)
         url_row.addWidget(self._web_copy_btn)
         url_row.addWidget(self._web_help_btn)
-        body.addLayout(url_row)
+        web_left.addLayout(url_row)
+
+        self._web_qr = QrWidget(size=112)
+        self._web_qr.setToolTip("Scan with your phone's camera to open the dashboard. Click for the next address.")
+        self._web_qr.clicked.connect(self._next_web_qr)
+        self._web_qr.setVisible(False)
+        self._web_qr_lbl = QLabel("")
+        self._web_qr_lbl.setStyleSheet("color: #888899; font-size: 11px;")
+        self._web_qr_lbl.setWordWrap(True)
+        self._web_qr_lbl.setVisible(False)
         self._web_note_lbl = QLabel("")
         self._web_note_lbl.setStyleSheet("color: #666688; font-size: 11px;")
         self._web_note_lbl.setWordWrap(True)
-        body.addWidget(self._web_note_lbl)
+        web_left.addWidget(self._web_qr_lbl)
+        web_left.addWidget(self._web_note_lbl)
+        web_left.addStretch(1)
+        web_box = QHBoxLayout()
+        web_box.setSpacing(12)
+        web_box.addLayout(web_left, stretch=1)
+        web_box.addWidget(self._web_qr, alignment=Qt.AlignmentFlag.AlignTop)
+        body.addLayout(web_box)
+        self._web_qr_index = 0
         self._web_urls: list[str] = []
         self._web_check.toggled.connect(self._on_web_toggled)
 
@@ -634,8 +657,32 @@ class LauncherWindow(QMainWindow):
             more = self._web_urls[1:3]
             self._web_note("Open this address on a device on the same network."
                            + (f"  Also: {', '.join(more)}" if more else ""))
+            self._web_qr_index = 0
         else:
             self._web_url_lbl.setText("")
+        self._update_web_qr(running)
+
+    def _update_web_qr(self, running: bool) -> None:
+        """Show the QR code of the selected address (the best one until you click the code for the next)."""
+        urls = self._web_urls if running else []
+        if not urls:
+            self._web_qr.set_text(None)
+            self._web_qr.setVisible(False)
+            self._web_qr_lbl.setVisible(False)
+            self.setFixedWidth(self._WIDTH)
+            return
+        self.setFixedWidth(self._WIDTH_WITH_QR)
+        url = urls[self._web_qr_index % len(urls)]
+        self._web_qr.set_text(url)
+        more = " Click the code for another address." if len(urls) > 1 else ""
+        self._web_qr_lbl.setText(f"Scan with your phone's camera (same Wi-Fi):<br><b>{url}</b>{more}")
+        self._web_qr.setVisible(True)
+        self._web_qr_lbl.setVisible(True)
+
+    def _next_web_qr(self) -> None:
+        if self._web_urls:
+            self._web_qr_index = (self._web_qr_index + 1) % len(self._web_urls)
+            self._update_web_qr(True)
 
     def _on_web_toggled(self, on: bool) -> None:
         if not on:

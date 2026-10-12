@@ -533,3 +533,79 @@ def test_many_threads_connecting_and_disconnecting(web, hub):
     while time.monotonic() < deadline and web.client_count:
         time.sleep(0.05)
     assert web.client_count == 0
+
+
+# ---------------------------------------------------------------------------
+# QR codes and the advertised addresses
+# ---------------------------------------------------------------------------
+
+
+def _svg_modules(svg: bytes, border: int = 4) -> set[tuple[int, int]]:
+    import re
+
+    out = set()
+    for m in re.finditer(rb"M(\d+),(\d+)h(\d+)v1h-\d+z", svg):
+        x, y, w = int(m.group(1)) - border, int(m.group(2)) - border, int(m.group(3))
+        out.update((x + i, y) for i in range(w))
+    return out
+
+
+def test_qr_endpoint_serves_the_svg_of_the_requested_text(web):
+    import urllib.parse
+
+    from fh6_telemetry.core import qr as qrmod
+
+    text = "http://192.168.1.101:8077/?cockpit=FH6-abc_DEF-123"
+    r, body = _get(web.port, "/api/qr.svg?d=" + urllib.parse.quote(text, safe=""))
+    assert r.status == 200
+    assert r.getheader("Content-Type") == "image/svg+xml"
+    assert r.getheader("X-Content-Type-Options") == "nosniff"
+    assert "default-src 'self'" in r.getheader("Content-Security-Policy")
+    expect = qrmod.encode(text, "M")
+    assert _svg_modules(body) == {(x, y) for y in range(expect.size) for x in range(expect.size) if expect.get(x, y)}
+    again, body2 = _get(web.port, "/api/qr.svg?d=" + urllib.parse.quote(text, safe=""))
+    assert body2 == body                                   # cached / deterministic
+    head, empty = _get(web.port, "/api/qr.svg?d=x", method="HEAD")
+    assert head.status == 200 and empty == b""
+
+
+def test_qr_endpoint_handles_unicode_long_and_missing_input(web):
+    import urllib.parse
+
+    r, body = _get(web.port, "/api/qr.svg?d=" + urllib.parse.quote("ünï ✓ 🚗"))
+    assert r.status == 200 and body.startswith(b"<svg")
+    r, body = _get(web.port, "/api/qr.svg?d=" + "x" * 700)                       # too big for level M, fits level L
+    assert r.status == 200
+    r, _ = _get(web.port, "/api/qr.svg?d=" + "x" * 900)
+    assert r.status == 413
+    r, _ = _get(web.port, "/api/qr.svg")
+    assert r.status == 400
+    r, _ = _get(web.port, "/api/qr.svg?d=")
+    assert r.status == 400
+    r, _ = _get(web.port, "/api/qr.svg?d=a&d=b&" + "&".join(f"k{i}=1" for i in range(20)))   # many fields: refused, not a crash
+    assert r.status == 400
+    healthy, _ = _get(web.port, "/healthz")
+    assert healthy.status == 200                            # ... and the server is still fine
+
+
+def test_api_urls_lists_the_lan_addresses_best_first(web, monkeypatch):
+    from fh6_telemetry.core import netinfo
+
+    web._urls_cache = None
+    monkeypatch.setattr(netinfo, "lan_candidates", lambda: [
+        netinfo.Candidate("192.168.1.101", "Wi-Fi", "wifi"), netinfo.Candidate("10.0.0.5", "Ethernet", "ethernet"),
+    ])
+    r, body = _get(web.port, "/api/urls")
+    assert r.status == 200 and r.getheader("Content-Type") == "application/json"
+    urls = json.loads(body)["urls"]
+    assert urls == [f"http://192.168.1.101:{web.port}/", f"http://10.0.0.5:{web.port}/"]
+    web._urls_cache = None
+    monkeypatch.setattr(netinfo, "lan_candidates", lambda: [])
+    assert json.loads(_get(web.port, "/api/urls")[1])["urls"] == [f"http://127.0.0.1:{web.port}/"]
+
+
+def test_the_qr_and_url_routes_are_lan_only_like_everything_else(web, monkeypatch):
+    monkeypatch.setattr(S, "_allowed_peer", lambda ip: False)
+    for path in ("/api/qr.svg?d=x", "/api/urls"):
+        r, _ = _get(web.port, path)
+        assert r.status == 403

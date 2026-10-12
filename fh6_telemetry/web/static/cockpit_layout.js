@@ -229,3 +229,56 @@ export function layoutsEqual(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
   return a.every((p, i) => p.id === b[i].id && p.type === b[i].type && p.x === b[i].x && p.y === b[i].y && p.w === b[i].w && p.h === b[i].h);
 }
+
+// ---- saved layouts ("presets") -------------------------------------------------------------------------------------------
+
+export const PRESET_MAX = 12;
+export const PRESET_NAME_MAX = 24;
+
+/** A preset name as shown: no control characters, runs of spaces collapsed, trimmed, at most PRESET_NAME_MAX long. */
+export function cleanPresetName(raw) {
+  if (typeof raw !== 'string') return '';
+  // eslint-disable-next-line no-control-regex
+  return raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, PRESET_NAME_MAX).trim();
+}
+
+/**
+ * Validate untrusted presets: [{ name, landscape, portrait }].  Each layout is sanitised (null = the factory layout);
+ * entries without a usable name are dropped, duplicate names (case-insensitive) keep the first, at most PRESET_MAX.
+ */
+export function sanitizePresets(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [], seen = new Set();
+  for (const item of raw) {
+    if (out.length >= PRESET_MAX) break;
+    if (!item || typeof item !== 'object') continue;
+    const name = cleanPresetName(item.name);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push({ name, landscape: sanitizeLayout(item.landscape, 'landscape'), portrait: sanitizeLayout(item.portrait, 'portrait') });
+  }
+  return out;
+}
+
+/**
+ * Add (or replace, by name) a preset.  Returns the new list, or null when the name is empty or the list is full
+ * (replacing an existing name is always allowed).  Layouts are copied.
+ */
+export function upsertPreset(presets, name, landscape, portrait) {
+  const clean = cleanPresetName(name);
+  if (!clean) return null;
+  const entry = {
+    name: clean,
+    landscape: sanitizeLayout(landscape, 'landscape'),
+    portrait: sanitizeLayout(portrait, 'portrait'),
+  };
+  const i = presets.findIndex((p) => p.name.toLowerCase() === clean.toLowerCase());
+  if (i >= 0) return presets.map((p, k) => (k === i ? entry : p));
+  if (presets.length >= PRESET_MAX) return null;
+  return [...presets, entry];
+}
+
+export function deletePreset(presets, name) {
+  const key = String(name).toLowerCase();
+  return presets.filter((p) => p.name.toLowerCase() !== key);
+}

@@ -261,3 +261,79 @@ test('a corrupt saved layout can never break the dash: it is sanitised on load',
     assert.doesNotThrow(() => frame(c, 3));
   } finally { removeDom(); }
 });
+
+// ---- Layouts dialog inside the cockpit -------------------------------------------------------------------------------------
+
+import { encodeShare } from '../../fh6_telemetry/web/static/cockpit_share.js';
+import { upsertPreset } from '../../fh6_telemetry/web/static/cockpit_layout.js';
+
+const dialogButton = (c, text) => c.view._dialog.el.find((x) => x.tag === 'button' && x.textContent === text);
+
+test('the Layouts button (in both bars) opens the dialog; opening it closes the gauge palette', () => {
+  const c = cockpit();
+  try {
+    const dlg = c.view._dialog;
+    assert.equal(dlg.isOpen, false);
+    button(c.view, '💾 Layouts').fire('click');
+    assert.equal(dlg.isOpen, true);
+    dlg.close();
+    button(c.view, '✎ Edit').fire('click'); frame(c);
+    button(c.view, '＋ Add').fire('click');
+    const palette = find(c.view, (x) => x.className === 'cockpit-palette');
+    assert.equal(palette.style.display, '');
+    // in edit mode the same button lives in the edit bar
+    const editBar = c.view.el.children.find((x) => x.className.includes('cockpit-edit'));
+    editBar.children.find((x) => x.textContent === '💾 Layouts').fire('click');
+    assert.equal(dlg.isOpen, true);
+    assert.equal(palette.style.display, 'none');
+  } finally { removeDom(); }
+});
+
+test('importing a code with the dash NOT in edit mode saves per orientation (factory-equal layouts as "none")', async () => {
+  const c = cockpit();
+  try {
+    await c.view.openLayouts();
+    const mine = [{ id: 'gear', type: 'gear', x: 2, y: 2, w: 8, h: 8 }];
+    c.view._dialog.el.find((x) => x.tag === 'textarea' && !x.readOnly).value = encodeShare({ landscape: mine, portrait: defaultLayout('portrait') });
+    dialogButton(c, 'Import').fire('click');
+    assert.deepEqual(stored(c.app, 'landscape').map((x) => x.type), ['gear']);
+    assert.equal(stored(c.app, 'portrait'), null, 'a layout equal to the factory one is stored as none');
+    assert.ok(c.app.settings.get('cockpit.presets').some((p) => p.name === 'Before last change'), 'the old dash was backed up');
+    frame(c);                                                                           // and the dash really draws the new layout
+    const g = c.canvas.getContext('2d');
+    g.__rec = []; frame(c);
+    assert.equal(g.__rec.some(([k]) => k === 'createRadialGradient'), false, 'no dials any more');
+  } finally { removeDom(); }
+});
+
+test('while editing, loading a saved layout is ONE undoable step on the visible orientation', async () => {
+  const c = cockpit((app) => app.settings.set('cockpit.presets', upsertPreset([], 'Minimal',
+    [{ id: 'gear', type: 'gear', x: 10, y: 4, w: 12, h: 10 }], [{ id: 'gear', type: 'gear', x: 4, y: 8, w: 10, h: 10 }])));
+  try {
+    button(c.view, '✎ Edit').fire('click'); frame(c);
+    await c.view.openLayouts();
+    const row = c.view._dialog.el.find((x) => x.className && x.className.includes('lay-item'));
+    row.children.find((x) => x.textContent === 'Load').fire('click');
+    assert.deepEqual(stored(c.app, 'landscape').map((x) => x.id), ['gear']);
+    assert.deepEqual(stored(c.app, 'portrait').map((x) => x.id), ['gear'], 'the other orientation is saved too');
+    assert.deepEqual(c.view._edit.working.map((x) => x.id), ['gear']);
+    c.view._dialog.close();
+    button(c.view, '↶ Undo').fire('click');                                               // one step back to the factory layout
+    assert.equal(stored(c.app, 'landscape'), null);
+    assert.ok(layoutsEqual(c.view._edit.working, defaultLayout('landscape')));
+  } finally { removeDom(); }
+});
+
+test('the dialog shares what is being edited, not just what was last saved', async () => {
+  const c = cockpit();
+  try {
+    button(c.view, '✎ Edit').fire('click'); frame(c);
+    c.canvas.fire('pointerdown', { clientX: 470, clientY: 105 });                          // remove the gear
+    await c.view.openLayouts();
+    const code = c.view._dialog.el.find((x) => x.tag === 'textarea' && x.readOnly).value;
+    const { decodeShare } = await import('../../fh6_telemetry/web/static/cockpit_share.js');
+    const got = decodeShare(code);
+    assert.equal(got.landscape.some((x) => x.type === 'gear'), false);
+    assert.equal(got.landscape.length, defaultLayout('landscape').length - 1);
+  } finally { removeDom(); }
+});

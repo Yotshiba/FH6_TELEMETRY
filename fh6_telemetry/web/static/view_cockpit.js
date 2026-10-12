@@ -10,6 +10,7 @@ import {
   GRID, WIDGET_TYPES, WIDGET_TYPE_IDS, addWidget, bringToFront, cellsFor, defaultLayout, handleSize, hitTest,
   layoutsEqual, moveWidget, orientationFor, rectOf, removeWidget, resizeWidget,
 } from './cockpit_layout.js';
+import { buildLayoutsDialog } from './cockpit_dialog.js';
 import { WIDGET_DRAW } from './cockpit_widgets.js';
 import { emit } from './bus.js';
 import { conv } from './units.js';
@@ -38,7 +39,8 @@ export function buildCockpit(ctx) {
   const bEdit = h('button', 'chip', '✎ Edit'); bEdit.title = 'Add, remove and move the gauges';
   bSound.addEventListener('click', () => actions.toggleSound());
   bMirror.addEventListener('click', () => settings.set('mirror', !settings.get('mirror')));
-  ctl.append(bSound, bMirror, bEdit);
+  const bLayouts = h('button', 'chip', '💾 Layouts'); bLayouts.title = 'Save, share and import cockpit layouts';
+  ctl.append(bSound, bMirror, bEdit, bLayouts);
 
   const editBar = h('div', 'cockpit-ctl cockpit-edit');
   editBar.style.display = 'none';
@@ -47,7 +49,8 @@ export function buildCockpit(ctx) {
   const bReset = h('button', 'chip', '↺ Reset'); bReset.title = 'Back to the factory layout';
   const bDone = h('button', 'chip', '✓ Done');
   const editInfo = h('span', 'cockpit-edit-info', '');
-  editBar.append(bAdd, bUndo, bReset, bDone, editInfo);
+  const bLayouts2 = h('button', 'chip', '💾 Layouts'); bLayouts2.title = 'Save, share and import cockpit layouts';
+  editBar.append(bAdd, bUndo, bReset, bLayouts2, bDone, editInfo);
 
   const palette = h('div', 'cockpit-palette');
   palette.style.display = 'none';
@@ -71,6 +74,8 @@ export function buildCockpit(ctx) {
   let geo = { w: 800, h: 450, orient: 'landscape' };
 
   const storedLayout = (orient) => settings.get('cockpit.' + orient) || DEFAULTS[orient];
+  /** The layout of an orientation as it is right now (while editing, the working copy). */
+  const layoutFor = (orient) => (E.active && orient === E.orient ? E.working : storedLayout(orient));
   const shown = () => (E.active ? (E.preview || E.working) : storedLayout(geo.orient));
 
   function persist(layout) {
@@ -87,6 +92,27 @@ export function buildCockpit(ctx) {
     E.preview = null;
     persist(layout);
   }
+
+  /** Put whole layouts on the dash (load / import). While editing the visible orientation it is one undoable step. */
+  function applyLayouts({ landscape, portrait }) {
+    for (const [orient, layout] of [['landscape', landscape], ['portrait', portrait]]) {
+      const next = layout.map((x) => ({ ...x }));
+      if (E.active && orient === E.orient) commit(next);
+      else settings.set('cockpit.' + orient, layoutsEqual(next, DEFAULTS[orient]) ? null : next);
+    }
+    E.selected = null;
+  }
+
+  const dialog = buildLayoutsDialog({
+    settings,
+    snapshot: () => ({ landscape: layoutFor('landscape'), portrait: layoutFor('portrait') }),
+    apply: applyLayouts,
+    notify: (toast) => emit('toast', toast),
+  });
+  root.appendChild(dialog.el);
+  const openLayouts = (opts) => { palette.style.display = 'none'; return dialog.open(opts); };
+  bLayouts.addEventListener('click', () => openLayouts());
+  bLayouts2.addEventListener('click', () => openLayouts());
 
   function enterEdit() {
     E.active = true;
@@ -299,6 +325,7 @@ export function buildCockpit(ctx) {
 
   return {
     id: 'cockpit', title: 'Cockpit', color: '#ff4d6d', el: root, charts: [], animated: true, update,
-    _edit: E,                                                                      // (read by tests)
+    openLayouts,                                                                    // (a shared link opens it with the code filled in)
+    _edit: E, _dialog: dialog,                                                      // (read by tests)
   };
 }

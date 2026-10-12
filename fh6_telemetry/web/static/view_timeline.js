@@ -16,6 +16,55 @@ const h = (tag, cls, text) => {
 const PAD = { l: 52, r: 10, t: 6, b: 22 };
 const WINDOWS = [10, 30, 60, 300];
 
+/**
+ * Runs of connected columns in a decimated series.
+ *
+ * `d.min / d.max` hold one value pair per pixel column; a column with no row is NaN. At fine zoom there is about
+ * one row per column, so empty columns between real ones are NORMAL (the rows are 13-16 ms apart) and must not
+ * break the line: only more than `maxSkip` empty columns in a row (a pause, a dropped link) start a new run.
+ * @returns {Array<[number, number]>} [first, last] column index of every run (both non-empty)
+ */
+export function columnRuns(d, maxSkip) {
+  const runs = [];
+  let start = -1, last = -1;
+  for (let i = 0; i < d.min.length; i++) {
+    if (!Number.isFinite(d.min[i])) continue;
+    if (start >= 0 && i - last - 1 > maxSkip) { runs.push([start, last]); start = -1; }   // more than maxSkip EMPTY columns between
+    if (start < 0) start = i;
+    last = i;
+  }
+  if (start >= 0) runs.push([start, last]);
+  return runs;
+}
+
+/**
+ * The window to draw: `n` pixel columns of `win` seconds each, ending on a multiple of the column width at or
+ * before `endT`. Anchoring the columns to a fixed time grid (instead of to the moving window start) keeps every
+ * column's rows the same from frame to frame, so the trace scrolls smoothly instead of shimmering.
+ */
+export function snapWindow(endT, win, n) {
+  const bw = win / n;
+  const t1 = Math.floor(endT / bw) * bw;
+  return { t0: t1 - win, t1, bw };
+}
+
+/**
+ * Time-axis ticks (seconds relative to NOW, <= 0) that fall inside [t0, t1]. `slack` widens the right end: the
+ * snapped window ends up to one column before the newest sample, and "now" must still get its label.
+ */
+export function axisTicks(latest, t0, t1, step, slack = 0) {
+  const out = [];
+  if (!(step > 0)) return out;
+  for (let k = Math.ceil((latest - t1 - slack) / step - 1e-9); out.length < 60; k++) {
+    const rel = -k * step;
+    if (latest + rel < t0 - 1e-9) break;
+    out.push(rel);
+  }
+  return out;
+}
+
+const GAP_S = 0.25;                                  // a hole longer than this in the rows is a real gap, not a thin spot
+
 export function buildTimeline(ctx) {
   const { store, settings, actions } = ctx;
   const root = h('div', 'view v-timeline');
@@ -25,7 +74,7 @@ export function buildTimeline(ctx) {
   root.append(bar, readout, canvas);
   const g = canvas.getContext('2d');
 
-  const S = { win: 30, live: true, endT: 0, cursor: null, marks: [], gen: store.gen };
+  const S = { win: 30, live: true, endT: 0, cursor: null, marks: [], gen: store.gen, auto: [] };
   const winBtns = WINDOWS.map((s) => {
     const b = h('button', 'chip', s >= 60 ? `${s / 60} min` : `${s} s`);
     b.addEventListener('click', () => { S.win = s; });
@@ -113,9 +162,12 @@ export function buildTimeline(ctx) {
     const latest = tl.latestTime();
     if (S.live) S.endT = latest;
     S.endT = Math.min(S.endT, latest);
-    const t1 = S.endT, t0 = t1 - S.win;
     const left = PAD.l, pw = w - PAD.l - PAD.r;
+    const cols = Math.max(8, Math.floor(pw));
+    const { t0, t1, bw } = snapWindow(S.endT, S.win, cols);
     geo = { t0, t1, left, pw };
+    const ticks = axisTicks(latest, t0, t1, niceStep(S.win / 6), S.live ? bw * 1.5 : 0);
+    const xAt = (t) => left + (t - t0) / S.win * pw;
     const list = strips(u, c);
     const gap = 8;
     const sh = (H - PAD.t - PAD.b - gap * (list.length - 1)) / list.length;
@@ -123,14 +175,19 @@ export function buildTimeline(ctx) {
     list.forEach((strip, si) => {
       const y0 = PAD.t + si * (sh + gap);
       // data + range
-      const data = strip.lines.map((l) => tl.window(l.key, t0, t1, Math.max(8, Math.floor(pw))));
+      const data = strip.lines.map((l) => tl.window(l.key, t0, t1, cols));
       let lo = strip.lo, hi = strip.hi;
       if (strip.hiKey) { const idx = tl.valueAtTime(strip.hiKey, t1); hi = (idx || 8000) * strip.hiMul; }
       if (strip.auto) {
         let m = 0;
-        data.forEach((d, i) => { for (let k = 0; k < d.max.length; k++) if (d.max[k] > m) m = d.max[k]; m *= 1; });
-        hi = Math.max(60, niceStep((m * strip.lines[0].mul) / 4) * 4 * 1.0);
-        hi = Math.max(hi, m * strip.lines[0].mul * 1.05);
+        for (const d of data) for (let k = 0; k < d.max.length; k++) if (d.max[k] > m) m = d.max[k];
+        let want = Math.max(60, niceStep((m * strip.lines[0].mul) / 4) * 4);
+        want = Math.max(want, m * strip.lines[0].mul * 1.05);
+        // grow at once, shrink slowly: the scale must not twitch every time a peak scrolls out of the window
+        const cur = S.auto[si];
+        hi = cur === undefined || want >= cur ? want : cur + (want - cur) * 0.08;
+        if (Math.abs(hi - want) < want * 0.01) hi = want;
+        S.auto[si] = hi;
       }
       const span = hi - lo || 1;
       const yOf = (v) => y0 + sh - (v - lo) / span * sh;
@@ -145,46 +202,60 @@ export function buildTimeline(ctx) {
         g.beginPath(); g.moveTo(left, y); g.lineTo(left + pw, y); g.stroke();
         g.fillText(String(Math.round(v)), left - 5, y);
       }
+      g.beginPath();                                 // faint time grid (the same ticks as the axis below)
+      for (const rel of ticks) { const x = Math.round(xAt(latest + rel)) + 0.5; if (x > left && x < left + pw) { g.moveTo(x, y0); g.lineTo(x, y0 + sh); } }
+      g.globalAlpha = 0.5; g.stroke(); g.globalAlpha = 1;
       g.fillStyle = c.chartTitle; g.textAlign = 'left'; g.textBaseline = 'top'; g.font = '600 10px system-ui, sans-serif';
       g.fillText(strip.title, left + 6, y0 + 4);
 
       // lines
       g.save(); g.beginPath(); g.rect(left, y0, pw, sh); g.clip();
+      const maxSkip = Math.max(2, Math.ceil(GAP_S / bw));
+      const colW = pw / cols;
       strip.lines.forEach((line, li) => {
-        const d = data[li], n = d.min.length;
-        const xOf = (i) => left + (i + 0.5) / n * pw;
-        g.strokeStyle = line.color; g.fillStyle = withAlpha(line.color, 0.2); g.lineWidth = 1.6; g.lineJoin = 'round';
-        // envelope bars (spikes survive decimation)
+        const d = data[li];
+        const runs = columnRuns(d, maxSkip);
+        const xOf = (i) => left + (i + 0.5) * colW;
+        const yMid = (i) => yOf((d.min[i] + d.max[i]) / 2 * line.mul);
+        g.strokeStyle = line.color; g.fillStyle = withAlpha(line.color, 0.2); g.lineJoin = 'round';
+        // area under the trace, one polygon per run (a gap must not be bridged by the fill either)
+        if (line.fill) {
+          const base = yOf(Math.max(lo, 0));
+          for (const [i0, i1] of runs) {
+            g.beginPath(); g.moveTo(xOf(i0), base);
+            for (let i = i0; i <= i1; i++) if (Number.isFinite(d.min[i])) g.lineTo(xOf(i), yMid(i));
+            g.lineTo(xOf(i1), base); g.closePath(); g.fill();
+          }
+        }
+        // envelope bars: spikes inside a column survive the decimation (on the pixel centre: crisp)
         g.beginPath();
-        for (let i = 0; i < n; i++) if (Number.isFinite(d.min[i])) { const x = xOf(i); g.moveTo(x, yOf(d.min[i] * line.mul)); g.lineTo(x, yOf(d.max[i] * line.mul)); }
-        g.globalAlpha = 0.55; g.lineWidth = 1; g.stroke(); g.globalAlpha = 1; g.lineWidth = 1.6;
-        // mid line
-        g.beginPath();
-        let started = false, firstX = null, lastX = null;
-        for (let i = 0; i < n; i++) {
-          if (!Number.isFinite(d.min[i])) { started = false; continue; }
-          const x = xOf(i), y = yOf((d.min[i] + d.max[i]) / 2 * line.mul);
-          if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
-          if (firstX === null) firstX = x;
-          lastX = x;
+        for (const [i0, i1] of runs) {
+          for (let i = i0; i <= i1; i++) {
+            if (!Number.isFinite(d.min[i]) || d.max[i] === d.min[i]) continue;
+            const x = Math.floor(xOf(i)) + 0.5;
+            g.moveTo(x, yOf(d.min[i] * line.mul)); g.lineTo(x, yOf(d.max[i] * line.mul));
+          }
+        }
+        g.globalAlpha = 0.55; g.lineWidth = 1; g.stroke(); g.globalAlpha = 1;
+        // the trace itself: through every non-empty column of a run
+        g.lineWidth = 1.6; g.beginPath();
+        for (const [i0, i1] of runs) {
+          g.moveTo(xOf(i0), yMid(i0));
+          if (i1 === i0) g.lineTo(xOf(i0) + 0.01, yMid(i0));           // a lone point still shows
+          for (let i = i0 + 1; i <= i1; i++) if (Number.isFinite(d.min[i])) g.lineTo(xOf(i), yMid(i));
         }
         g.stroke();
-        if (line.fill && firstX !== null) {
-          // close the area along the baseline between the first and last REAL points (data may
-          // not fill the whole window, e.g. right after a reload)
-          const base = yOf(Math.max(lo, 0));
-          g.lineTo(lastX, base); g.lineTo(firstX, base); g.closePath(); g.fill();
-        }
       });
       g.restore();
     });
 
-    // time axis
+    // time axis: seconds before NOW (so it reads correctly when scrubbed back as well)
     g.fillStyle = c.chartText; g.font = '10px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top';
-    const tstep = niceStep(S.win / 6);
-    for (let t = Math.ceil((t0 - t1) / tstep) * tstep; t <= 0.0001; t += tstep) {
-      const x = left + (t + S.win) / S.win * pw;
-      g.fillText(t === 0 ? 'now' : `${Math.round(t)}s`, x, H - PAD.b + 5);
+    const fracDigits = niceStep(S.win / 6) < 1 ? 1 : 0;
+    for (const rel of ticks) {
+      const x = xAt(latest + rel);
+      if (x < left - 2 || x > left + pw + 2) continue;
+      g.fillText(rel === 0 ? 'now' : `${rel.toFixed(fracDigits)}s`, Math.min(left + pw - 8, Math.max(left + 10, x)), H - PAD.b + 5);
     }
 
     // marks

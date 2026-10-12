@@ -2,6 +2,7 @@
 // Everything is validated on load, so a hand-edited / old / corrupt value can't break the page.
 
 import { emit } from './bus.js';
+import { sanitizeLayout } from './cockpit_layout.js';
 import { DEFAULT_SHIFT } from './shift.js';
 import { defaultUnits, normalizeUnits } from './units.js';
 
@@ -30,6 +31,7 @@ export function defaults() {
     shift: { ...DEFAULT_SHIFT },
     mirror: false,
     keepAwake: true,                 // a dash that goes to sleep is no dash
+    cockpit: { landscape: null, portrait: null },   // custom cockpit layouts (null = the factory one)
   };
 }
 
@@ -71,6 +73,10 @@ export function sanitize(raw) {
     },
     mirror: bool(r.mirror, d.mirror),
     keepAwake: bool(r.keepAwake, d.keepAwake),
+    cockpit: {
+      landscape: sanitizeLayout(r.cockpit && r.cockpit.landscape, 'landscape'),
+      portrait: sanitizeLayout(r.cockpit && r.cockpit.portrait, 'portrait'),
+    },
   };
   return out;
 }

@@ -50,13 +50,32 @@ gaming PC then does no dashboard work at all.
 
 | Tab | What it does |
 |---|---|
-| **Cockpit** | Analogue speedo + tacho that glide, 15 F1-style **shift lights**, a **steering wheel that turns**, pedal bars, a big gear read-out and a **live lap delta** vs. your best lap. Portrait phones get a single big rev dial. |
+| **Cockpit** | A dash **you build yourself**: analogue speedo + tacho that glide, F1-style **shift lights**, a **steering wheel that turns**, pedal bars, a big gear read-out, a **live lap delta**, tyre temperatures, G-force ball and more (20 gauges). Tap **✎ Edit** to add, remove, move and resize them — see below. |
 | **Dash** | The compact one-screen landscape view (speed, gear, RPM, pedals, tyres, 3 charts). |
 | **Map** | Your **track drawn live from the car's position**, coloured by speed, with lap flags, a scale bar, *Fit / Follow / North-up* and zoom. |
 | **Lab** | **Drag meter** (0–60 mph, 0–100, 0–200, 100–200 km/h, ¼ mile with trap speed, 100–0 and 60–0 braking distances — arm by stopping, then launch), a **G-force circle** with peaks, a **drift score** with combo multiplier, **air-time** counter, session / lifetime **records**, an attitude horizon + compass and the **trophy room**. |
 | **Chassis** | A top-down car: tyres coloured by temperature, steering angle, suspension bars, a weight-transfer ball, brake lights, exhaust flames at the limiter, a lift-off when airborne. |
-| **Rewind** | The last ~5 minutes at full rate in four strips. Drag to look back, wheel/buttons to zoom, tap for a read-out, **★ Mark** a moment, **⬇ CSV** to export the recording. |
+| **Rewind** | The last ~5 minutes at full rate in four strips (continuous lines at every zoom, breaks only where the data really stops). Drag to look back, wheel/buttons to zoom, tap for a read-out, **★ Mark** a moment, **⬇ CSV** to export the recording. |
 | Race Status · Car & Lap · Tyres · Engine · Inputs · Motion | The six desktop windows. |
+
+### Build your own cockpit
+
+On the **Cockpit** tab tap **✎ Edit** (bottom-left). The dash turns into a snap-to-grid editor and keeps running with live data:
+
+| Do this | To |
+|---|---|
+| drag a gauge | **move** it (it snaps to the grid and is clamped to the screen) |
+| drag the triangle in its bottom-right corner | **resize** it (each gauge has a minimum size) |
+| tap the red **✕** in its top-right corner | **remove** it |
+| **＋ Add** | open the palette and add any of the 20 gauges (speedometer, tachometer, digital speed / RPM, gear, shift lights, steering wheel, brake / throttle / clutch pedals, fuel, boost, power & torque, tyre temperatures, lap delta, lap times, G-force, compass, speed trace, drift score); you can add several of the same kind |
+| **↶ Undo** | step back (up to 40 changes) |
+| **↺ Reset** | back to the factory layout (tap twice) |
+| **✓ Done** | leave edit mode |
+
+With a keyboard: select a gauge, then **arrow keys** move it, **Shift + arrows** resize it, **Delete** removes it, **Esc** deselects.
+Landscape and portrait have **separate layouts** (turn the phone while editing to edit the other one). Layouts are saved in
+this browser only, so a phone and a tablet can have different dashes. *Reset* puts the factory layout back; the factory layout
+itself is never overwritten.
 
 **Gimmicks (all optional, in ⚙ Settings):** six themes (Neon, Carbon, Retro CRT, Synthwave,
 Daylight, Stealth); unit toggles (km/h ⇄ mph, °C ⇄ °F, bar ⇄ psi, hp ⇄ kW ⇄ PS, Nm ⇄ lb-ft, km ⇄ mi);

@@ -27,6 +27,23 @@ body { display: block; }
 .v-cockpit.mirror .cockpit-canvas { transform: scaleX(-1); }
 .cockpit-ctl, .map-ctl { position: absolute; z-index: 3; display: flex; gap: 6px; flex-wrap: wrap; }
 .cockpit-ctl { left: 10px; bottom: 10px; }
+.cockpit-edit { align-items: center; }
+.cockpit-edit-info { font: 600 11px var(--ui-font, system-ui); color: var(--dim); padding-left: 4px; text-transform: capitalize; }
+.v-cockpit.editing .cockpit-canvas { touch-action: none; cursor: default; }
+.cockpit-palette {
+  position: absolute; left: 10px; bottom: 54px; z-index: 4; width: min(520px, calc(100% - 20px)); max-height: min(60%, 360px);
+  overflow: auto; padding: 10px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, .55);
+}
+.pal-title { font: 800 12px var(--ui-font, system-ui); letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin: 0 0 8px 2px; }
+.pal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.pal-item {
+  display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+}
+.pal-item b { font: 700 12px var(--ui-font, system-ui); color: var(--bright); }
+.pal-item span { font: 500 10px var(--ui-font, system-ui); color: var(--dim); }
+.pal-item:hover { border-color: var(--accent); }
 .map-ctl { left: 10px; top: 10px; max-width: calc(100% - 20px); }
 .map-info { position: absolute; right: 12px; top: 12px; font: 600 11px var(--ui-font, system-ui); color: var(--chart-text); z-index: 3; }
 

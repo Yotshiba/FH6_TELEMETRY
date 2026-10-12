@@ -124,3 +124,13 @@ def test_hello_fixture_matches_the_server_payload():
     from tools.dump_hello_fixture import FIXTURE, build
 
     assert FIXTURE.read_text(encoding="utf-8") == build(), "stale tests/js/hello.json: run tools/dump_hello_fixture.py"
+
+
+def test_keep_awake_is_wired_into_the_page_and_on_by_default():
+    html, app, settings = _read("index.html"), _read("app.js"), _read("settings.js")
+    assert 'id="btn-awake"' in html
+    assert "$('btn-awake')" in app and "keepAwake.onChange(" in app
+    assert re.search(r"keepAwake:\s*true", settings), "a dash that goes to sleep is no dash: default must be on"
+    assert {"KeepAwake", "describeAwake"} <= _exports(_read("awake.js"))
+    assert "from './awake.js'" in _read("extras.js")
+    assert "#btn-awake.on" in _read("extras.css") and "#btn-awake.warn" in _read("extras.css")

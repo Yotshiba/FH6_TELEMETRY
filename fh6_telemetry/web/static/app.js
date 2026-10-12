@@ -5,9 +5,8 @@
 import { Analytics } from './analytics.js';
 import { emit, on } from './bus.js';
 import { setChartUnits } from './charts.js';
-import { exportCsv, exportShareCard, KeepAwake, onKonami } from './extras.js';
+import { describeAwake, exportCsv, exportShareCard, KeepAwake, onKonami } from './extras.js';
 import { Feel } from './feel.js';
-import { gearLabel } from './format.js';
 import { Fx } from './fx.js';
 import { Lifetime } from './lifetime.js';
 import { Settings } from './settings.js';
@@ -62,6 +61,19 @@ feel.start();
 initToasts($('toasts'));
 const fx = new Fx($('fx'), $('vignette'), $('shake'), settings);
 const keepAwake = new KeepAwake();
+const awakeBtn = $('btn-awake');
+let awakeWarned = false;
+keepAwake.onChange((mode) => {                       // the ☀ button shows what the device is really doing
+  awakeBtn.classList.toggle('on', mode === 'wakelock' || mode === 'video');
+  awakeBtn.classList.toggle('warn', mode === 'pending' || mode === 'unsupported');
+  awakeBtn.setAttribute('aria-pressed', String(mode === 'wakelock' || mode === 'video'));
+  awakeBtn.title = describeAwake(mode);
+  if (mode === 'unsupported' && !awakeWarned) {
+    awakeWarned = true;
+    emit('toast', { icon: '☀', title: "Can't keep the screen on", text: "Set this device's auto-lock / screen saver to Never", rarity: 'common', ms: 6000 });
+  }
+});
+awakeBtn.addEventListener('click', () => settings.set('keepAwake', !settings.get('keepAwake')));
 
 const actions = {
   toggleSound: async () => {
@@ -92,8 +104,8 @@ on('settings', ({ path }) => {
   if (path === 'keepAwake' || path === '*') { if (settings.get('keepAwake')) keepAwake.enable(); else keepAwake.disable(); }
   if (path && path.startsWith('units')) { lastVersion = -1; for (const v of views) for (const c of v.charts) c.dirty = true; }
 });
-if (settings.get('keepAwake')) keepAwake.enable();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastVersion = -1; keepAwake.reacquire(); } });
+if (settings.get('keepAwake')) keepAwake.enable();      // (retries by itself on the first tap and when the tab returns)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) lastVersion = -1; });
 
 onKonami(() => {
   settings.set('theme', 'hyperdrive');
@@ -226,7 +238,6 @@ function frame(ts) {
       }
     }
     if (!active) return;
-    if (store.hello && store.last) store.gear = gearLabel(store.hello.lab, store.f('Gear'), store.gear);
     if (active.animated) {
       if (ts - lastAnim < 14) return;                              // ~60 fps cap: a 120 Hz phone draws every 2nd frame
       const adt = Math.min(0.1, (ts - (lastAnim || ts)) / 1000);   // seconds since the last DRAW, not the last frame

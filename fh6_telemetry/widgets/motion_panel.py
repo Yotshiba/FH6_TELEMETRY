@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..constants import GEAR_MAP
+from ..core.derive import GearDisplay
 from ..style import _divider, _key_label, _section_label, _val_label
 
 
@@ -24,6 +24,7 @@ class MotionPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._gear = GearDisplay()
         self.setMinimumWidth(230)
 
         outer = QVBoxLayout(self)
@@ -120,8 +121,7 @@ class MotionPanel(QWidget):
         speed_mph = t.get("Speed", 0.0) * 2.23694
         self._speed_kmh_lbl.setText(f"{speed_kmh:.0f}")
         self._mph_lbl.setText(f"{speed_mph:.0f} mph")
-        _g = t.get("Gear", 0)
-        self._gear_lbl.setText(GEAR_MAP.get(_g, str(_g)))
+        self._gear_lbl.setText(self._gear.update(t.get("Gear", 0), t.get("TimestampMS")))
 
         _G = 9.80665
         self._vel_vals["Vel X"].setText(f"{t.get('VelocityX',       0.0):+.2f}")

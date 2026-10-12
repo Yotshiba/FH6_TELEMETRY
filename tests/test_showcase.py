@@ -322,3 +322,27 @@ def test_every_lap_is_reported_once_and_there_is_no_phantom_lap_zero(long_rows, 
     assert [(e["number"], e["timeMs"]) for e in laps] == expected
     assert [e["best"] for e in laps[:3]][0] is True               # the first lap of a session is a best lap
     assert all(35_000 < e["timeMs"] < 65_000 for e in laps)
+
+
+def test_gear_codes_are_one_based_with_the_games_one_packet_neutral_at_each_shift(rows):
+    """Forward gears are 1-based (1 = first); every shift sends a single neutral (11) packet, like the real game."""
+    gears = [r["Gear"] for r in rows if r["IsRaceOn"]]
+    forward = [g for g in gears if g != 11]
+    assert min(forward) == 1 and max(forward) <= 6 and 0 not in forward
+    # neutral is only ever a lone packet between two forward gears, and each lone neutral is a real change of gear
+    for i, g in enumerate(gears):
+        if g == 11 and 0 < i < len(gears) - 1:
+            assert gears[i - 1] != 11 and gears[i + 1] != 11, i
+            assert gears[i - 1] != gears[i + 1], "a neutral packet only appears at a shift"
+    assert gears.count(11) >= 20
+
+
+def test_the_shift_neutral_never_reaches_the_screen_in_either_front_end(rows):
+    from fh6_telemetry.core.derive import GearDisplay
+
+    d = GearDisplay()
+    shown = []
+    for r in rows:
+        if r["IsRaceOn"]:
+            shown.append(d.update(r["Gear"], r["TimestampMS"]))
+    assert "N" not in shown and "11" not in shown

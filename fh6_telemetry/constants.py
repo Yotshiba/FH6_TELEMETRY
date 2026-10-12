@@ -94,10 +94,17 @@ CLASS_COLORS: dict[str, str] = {
 
 DRIVETRAIN: dict[int, str] = {0: "FWD", 1: "RWD", 2: "AWD"}
 
+# The ``Gear`` field is 1-based for forward gears (1 = first gear, 2 = second ...) and 0 is reverse.
+# (An earlier table treated code 1 as "N" and shifted every forward gear down by one.)
+# Code 11 is *neutral*: the game reports it for a single packet at every shift (see tests/data/real_sample.fh6rec:
+# 5, 11, 6), and steadily while parked in neutral. It is deliberately not in GEAR_MAP so that it never replaces a
+# real gear on screen for one frame; ``core.derive.GearDisplay`` shows "N" only once it has lasted a while.
 GEAR_MAP: dict[int, str] = {
-    0: "R", 1: "N", 2: "1", 3: "2", 4: "3", 5: "4",
-    6: "5", 7: "6", 8: "7", 9: "8", 10: "9",
+    0: "R", 1: "1", 2: "2", 3: "3", 4: "4", 5: "5",
+    6: "6", 7: "7", 8: "8", 9: "9", 10: "10",
 }
+NEUTRAL_GEAR_CODE = 11
+NEUTRAL_HOLD_MS = 250       # neutral must last this long (game clock) before it is displayed as "N"
 
 CAR_GROUP_MAP: dict[int, str] = {
     0: "Cars", 1: "Trucks", 2: "Buggies", 3: "Drift",

@@ -49,3 +49,14 @@ def test_gear_has_a_one_packet_transient_during_a_shift(frames):
     gears = [f["Gear"] for _, f in frames]
     assert 11 in gears
     assert gears.count(11) == 1
+
+
+def test_gear_display_on_the_real_capture_never_flashes_the_shift_neutral(frames):
+    """The capture goes 5, (one 11), 6: the screen must read 5 ... 5, 6 ... 6 - never 11 and never N."""
+    from fh6_telemetry.core.derive import GearDisplay
+
+    d = GearDisplay()
+    shown = [d.update(f["Gear"], f["TimestampMS"]) for _, f in frames]
+    assert "11" not in shown and "N" not in shown
+    changes = [g for i, g in enumerate(shown) if i == 0 or g != shown[i - 1]]
+    assert changes == ["5", "6"]

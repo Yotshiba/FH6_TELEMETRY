@@ -63,7 +63,7 @@ Daylight, Stealth); unit toggles (km/h ⇄ mph, °C ⇄ °F, bar ⇄ psi, hp ⇄
 **engine sound** synthesised from the RPM (plus turbo whistle, blow-off, tyre squeal, kerb rumble and a shift beep);
 **voice call-outs** ("Two hundred kilometres an hour", lap times, low fuel, hot tyres); **phone vibration** for
 kerbs, impacts and landings; speed-lines, a redline vignette and screen shake; confetti for big unlocks;
-a **HUD mirror** mode for a windshield; a **keep-screen-awake** switch; 25 **achievements**; a
+a **HUD mirror** mode for a windshield; a **keep-screen-awake** button (on by default: no sleep or screen saver while the page is open); 25 **achievements**; a
 **shareable session card** (PNG with your track, records and trophies). Try the Konami code. 😉
 
 Your records, personal bests and trophies are stored **in that browser only** (`localStorage`) and never leave
@@ -117,11 +117,27 @@ The PC must accept the connection, and the phone must be able to reach the PC.
 * There is no password. Anyone on your home network can open the page while the server is
   on. Turn it off when you don't need it.
 
+## Keeping the screen on
+
+The dashboard keeps the device it is open on from dimming, locking or starting its screen saver. It is **on by
+default** (the **☀** button in the top bar, or *Settings → Screen*):
+
+| ☀ | Meaning |
+|---|---|
+| yellow | the screen is being held awake |
+| orange, pulsing | waiting: phones only allow it after **one tap anywhere on the page** (or the tab is in the background) |
+| orange after a tap + a toast | this browser refused: set the device's auto-lock / screen saver to *Never* (iPhone: *Settings → Display & Brightness → Auto-Lock*; Android: *Display → Screen timeout*; Windows: *Lock screen / Screen saver*) |
+
+How it works: the proper *Screen Wake Lock* API is only offered on `https://` or `localhost`, so over
+`http://192.168.x.x` the page plays a tiny, silent, almost invisible looping video instead (the trick browsers
+honour for video players). It retries by itself when you return to the tab and re-checks every 20 s. Nothing
+is recorded or sent anywhere. This is best-effort and depends on the browser and its battery-saver mode;
+a device that is also on battery saver may still dim.
+
 ## Limitations of plain HTTP on a LAN address
 
 Browsers treat `http://192.168.x.x` as an *insecure context*, which disables a few features
-on the phone: the **Screen Wake Lock** (the screen may dim — raise the device's auto-lock
-time or use its "keep screen on while charging" option), **Add to Home Screen as an
+on the phone: the **Screen Wake Lock** API (the video fallback above covers it), **Add to Home Screen as an
 installable app**, and clipboard access. The dashboard itself is unaffected.
 
 ## How it works (for the curious)

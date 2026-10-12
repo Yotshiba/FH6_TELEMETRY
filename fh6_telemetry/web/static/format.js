@@ -12,11 +12,46 @@ export function fmtTime(ms) {
   return `${m}:${s.toFixed(3).padStart(6, '0')}`;
 }
 
-/** Gear code -> label; unknown codes (the one-packet shift transient) keep the previous label. */
+/** Gear code -> label ("R", "1", "2" ...; forward gears are 1-based); unknown codes keep the previous label. */
 export function gearLabel(lab, code, prev) {
   const v = lab.gear[String(code)];
   if (v !== undefined) return v;
   return prev || String(code);
+}
+
+const NEUTRAL_DEFAULT = { code: 11, holdMs: 250 };
+
+/**
+ * Gear label for a stream of rows (the twin of core/derive.py GearDisplay).
+ *
+ * The game reports neutral (code 11) for ONE packet at every shift. It must not flash on screen, so neutral keeps
+ * the previous gear until it has lasted `holdMs` of game time, then shows "N" (at once if nothing was shown yet).
+ * Real gears show immediately; other unknown codes hold the previous label.
+ */
+export class GearTracker {
+  constructor() { this.label = ''; this._since = null; }
+
+  reset() { this.label = ''; this._since = null; }
+
+  /** @param lab the hello's `lab` table  @param code raw Gear  @param tsMs TimestampMS of the row (u32, may wrap) */
+  update(lab, code, tsMs) {
+    const known = lab.gear[String(code)];
+    if (known !== undefined) { this._since = null; this.label = known; return known; }
+    const nz = lab.neutral || NEUTRAL_DEFAULT;
+    if (code === nz.code) {
+      if (!this.label) this.label = 'N';
+      else if (Number.isFinite(tsMs)) {
+        if (this._since === null) this._since = tsMs;
+        else {
+          const elapsed = (tsMs - this._since) >>> 0;              // u32 arithmetic: survives the clock's wrap-around
+          if (elapsed >= 0x80000000) this._since = tsMs;           // the clock went backwards: it restarted
+          else if (elapsed >= nz.holdMs) this.label = 'N';
+        }
+      }
+      return this.label;
+    }
+    return this.label || String(code);
+  }
 }
 
 /** Bar fill colour: green -> amber -> red; `invert` = low is bad (fuel). Same rule as the desktop app. */

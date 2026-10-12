@@ -2,6 +2,7 @@
 // full-rate timeline for the rewind view, and subscribers for the analytics / map / sound.
 // Rows are positional arrays aligned with the column tables from the "hello" event.
 
+import { GearTracker } from './format.js';
 import { Timeline } from './timeline.js';
 
 export class Ring {
@@ -31,7 +32,8 @@ export class Store {
     this.pps = 0;
     this.version = 0;                  // bumped whenever data changed
     this.gen = 0;                      // bumped whenever the history is wiped (views drop time-keyed state)
-    this.gear = '';                    // last valid gear label (shift transients keep it)
+    this.gear = '';                    // gear label to show (maintained row by row; a shift's neutral never flashes)
+    this.gearTracker = new GearTracker();
     this.timeline = null;              // full-rate history for the rewind view
     this.rowListeners = [];            // fn(rows) — live rows only (not replayed history)
     this.slowListeners = [];           // fn(slowRow)
@@ -56,9 +58,11 @@ export class Store {
       }
       this.timeline = new Timeline({ keys: h.F.map((c) => c.k) });
       this.last = null; this.slow = null; this.seq = null;
+      this.gearTracker.reset(); this.gear = '';
       this.gen++;
     }
     this.race = this.F.IsRaceOn;
+    this._iGear = this.F.Gear; this._iTs = this.F.TimestampMS;
     this.version++;
     for (const fn of this.helloListeners) { try { fn(this, !keep); } catch (e) { console.error(e); } }
     return !keep;
@@ -88,7 +92,10 @@ export class Store {
   pushRows(rows, replay = false) {
     for (const row of rows) {
       this.last = row;
-      if (row[this.race]) for (const [col, ring] of this.rings) ring.push(row[col]);
+      if (row[this.race]) {
+        for (const [col, ring] of this.rings) ring.push(row[col]);
+        if (this._iGear !== undefined) this.gear = this.gearTracker.update(this.hello.lab, row[this._iGear], row[this._iTs]);
+      }
       if (this.timeline) this.timeline.push(row);
     }
     this.version++;

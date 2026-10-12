@@ -110,10 +110,23 @@ def build_packet(values: dict[str, float]) -> bytes:
 # ---------------------------------------------------------------------------
 
 _GEAR_RATIOS = (3.6, 2.4, 1.75, 1.35, 1.05, 0.85)  # gears 1..6
+
+NEUTRAL_CODE = 11   # what the real game sends for one packet at every shift (and while parked in neutral)
+
+
+class _GearCodes:
+    """Mixin: turns a gear number into the Gear field, with the real game's one-packet neutral at each shift."""
+
+    _prev_gear: int | None = None
+
+    def _gear_code(self, gear: int) -> int:
+        prev, self._prev_gear = self._prev_gear, gear
+        return NEUTRAL_CODE if prev is not None and gear != prev else gear
+
 _WHEELS = ("FL", "FR", "RL", "RR")
 
 
-class Simulator:
+class Simulator(_GearCodes):
     """Deterministic (seeded) telemetry generator."""
 
     def __init__(self, scenario: str, seed: int = 1) -> None:
@@ -172,7 +185,7 @@ class Simulator:
             seg = ph / 0.75 * len(_GEAR_RATIOS)
             gi = min(int(seg), len(_GEAR_RATIOS) - 1)
             frac = seg - gi
-            gear = gi + 2  # FH gear code: 2 -> "1"
+            gear = gi + 1  # FH gear code: 1-based (1 = first gear, 0 = reverse)
             rpm = idle + (max_rpm - idle) * (0.45 + 0.55 * frac)
             speed = rpm * 0.0075 / max(_GEAR_RATIOS[gi], 0.5)   # m/s: ~18 in 1st .. ~75 in 6th
             throttle = 0.9 + 0.1 * math.sin(t * 3)
@@ -253,7 +266,7 @@ class Simulator:
             "Brake": brake * 255,
             "Clutch": 0,
             "HandBrake": 255 if (not steady and int(t) % 40 == 39) else 0,
-            "Gear": gear,
+            "Gear": self._gear_code(gear),
             "Steer": 127 * math.sin(t * 0.7) * (0.2 if steady else 1.0),
             "NormalizedDrivingLine": 40 * math.sin(t * 0.5),
             "NormalizedAIBrakeDifference": 20 * math.sin(t * 0.3),
@@ -373,7 +386,7 @@ class _Track:
         return a + (b - a) * f
 
 
-class ShowcaseCar:
+class ShowcaseCar(_GearCodes):
     """Deterministic demo session: drag run -> braking test -> N laps -> repeat.
 
     Scene changes (new phase, teleport between the strip and the circuit) start with ``PAUSE_S`` of
@@ -632,7 +645,7 @@ class ShowcaseCar:
             "CurrentRaceTime": self.race_time,
             "LapNumber": self.lap, "RacePosition": 3,
             "Accel": throttle * 255, "Brake": brake * 255, "Clutch": 0, "HandBrake": 0,
-            "Gear": gear_i + 2 if v >= 1.0 else 1,
+            "Gear": self._gear_code(gear_i + 1 if v >= 1.0 else 1),
             "Steer": 127 * self.steer_f,
             "NormalizedDrivingLine": 0, "NormalizedAIBrakeDifference": 0,
         }

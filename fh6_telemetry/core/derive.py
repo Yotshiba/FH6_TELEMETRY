@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from ..constants import _TEMP_COLORS, GEAR_MAP
+from ..constants import _TEMP_COLORS, GEAR_MAP, NEUTRAL_GEAR_CODE, NEUTRAL_HOLD_MS
 
 # ---------------------------------------------------------------------------
 # Colours
@@ -56,16 +56,52 @@ def bar_color(value: float, danger: float, invert: bool = False) -> str:
 
 
 def gear_label(code: int, previous: str | None = None) -> str:
-    """Gear code → label ("R", "N", "1" …).
+    """Gear code → label ("R", "1", "2" …); 0 is reverse, forward gears are 1-based.
 
-    The game emits a one-packet transient (code 11) at each shift that is not a
-    real gear; unknown codes keep showing the *previous* label when there is
-    one, instead of flashing the raw number.
+    The game emits neutral (code 11) for one packet at each shift; it is not a
+    real gear, so unknown codes keep showing the *previous* label when there is
+    one, instead of flashing the raw number.  For a stream of frames use
+    :class:`GearDisplay`, which also shows "N" when neutral really lasts.
     """
     label = GEAR_MAP.get(code)
     if label is not None:
         return label
     return previous if previous is not None else str(code)
+
+
+class GearDisplay:
+    """Gear label for a stream of frames: a shift's one-packet neutral never flashes.
+
+    ``update(code, ts_ms)`` returns the label to show.  Real gears show at once.  Neutral
+    (``NEUTRAL_GEAR_CODE``) keeps the previous gear on screen until it has lasted
+    ``NEUTRAL_HOLD_MS`` of game time, then shows "N" (right away if there is no previous gear).
+    Any other unknown code holds the previous label.
+    """
+
+    def __init__(self) -> None:
+        self.label = ""
+        self._since: int | None = None
+
+    def update(self, code: int, ts_ms: int | None = None) -> str:
+        known = GEAR_MAP.get(code)
+        if known is not None:
+            self._since = None
+            self.label = known
+            return known
+        if code == NEUTRAL_GEAR_CODE:
+            if not self.label:
+                self.label = "N"
+            elif ts_ms is not None:
+                if self._since is None:                              # the first neutral packet starts the timer
+                    self._since = ts_ms
+                else:
+                    elapsed = (ts_ms - self._since) & 0xFFFFFFFF     # u32 clock: survives its wrap-around
+                    if elapsed >= 0x80000000:                        # ... but a clock that went backwards restarted
+                        self._since = ts_ms
+                    elif elapsed >= NEUTRAL_HOLD_MS:
+                        self.label = "N"
+            return self.label
+        return self.label or str(code)
 
 
 # ---------------------------------------------------------------------------

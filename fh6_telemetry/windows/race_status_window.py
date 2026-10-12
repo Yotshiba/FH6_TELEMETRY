@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..constants import CAR_CLASS, DRIVETRAIN, GEAR_MAP
+from ..constants import CAR_CLASS, DRIVETRAIN
+from ..core.derive import GearDisplay
 from ..style import _divider, _key_label, _section_label, _val_label
 from ..telemetry import secs_to_time
 from .category_window import CategoryWindow
@@ -37,6 +38,7 @@ class RaceStatusWindow(CategoryWindow):
 
     def __init__(self) -> None:
         super().__init__()
+        self._gear = GearDisplay()
         self._race_on: bool | None = None      # None: still showing "NO SIGNAL"
         self.setWindowTitle("FH6 — Race Status")
         self.setMinimumSize(260, 480)
@@ -160,8 +162,7 @@ class RaceStatusWindow(CategoryWindow):
 
         self._speed_lbl.setText(f"{t.get('Speed', 0.0) * 3.6:.0f}")
         self._mph_lbl.setText(f"{t.get('Speed', 0.0) * 2.23694:.0f} mph")
-        _g = t.get("Gear", 0)
-        self._gear_lbl.setText(GEAR_MAP.get(_g, str(_g)))
+        self._gear_lbl.setText(self._gear.update(t.get("Gear", 0), t.get("TimestampMS")))
 
         self._race_vals["Lap:"].setText(str(t.get("LapNumber", 0)))
         self._race_vals["Position:"].setText(str(t.get("RacePosition", 0)))

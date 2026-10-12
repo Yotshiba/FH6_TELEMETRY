@@ -10,7 +10,6 @@ import { Store } from '../../fh6_telemetry/web/static/store.js';
 import { Settings } from '../../fh6_telemetry/web/static/settings.js';
 import { Lifetime } from '../../fh6_telemetry/web/static/lifetime.js';
 import { Analytics } from '../../fh6_telemetry/web/static/analytics.js';
-import { gearLabel } from '../../fh6_telemetry/web/static/format.js';
 import { buildCockpit } from '../../fh6_telemetry/web/static/view_cockpit.js';
 import { buildMap } from '../../fh6_telemetry/web/static/view_map.js';
 import { buildLab } from '../../fh6_telemetry/web/static/view_lab.js';
@@ -123,7 +122,6 @@ function drive(app, view, frames, { rowOver, units } = {}) {
     store.pushRows([fastRow(store, i, rowOver ? rowOver(i) : {})]);
     if (i % 7 === 0) store.pushSlow(slowRow(store, i));
     store.seq = i;
-    store.gear = gearLabel(store.hello.lab, store.f('Gear'), store.gear);
     view.update(1 / 60, i * 16.7);
   }
 }
@@ -220,7 +218,6 @@ test('classic views (race, car, tyres, engine, inputs, motion, dash): update + c
         app.store.pushRows([fastRow(app.store, i)]);
         if (i % 7 === 0) app.store.pushSlow(slowRow(app.store, i));
         app.store.seq = i;
-        app.store.gear = gearLabel(app.store.hello.lab, app.store.f('Gear'), app.store.gear);
         if (i === 60 && units) app.settings.set('units', units);
         for (const v of views) {
           assert.doesNotThrow(() => { v.update(0.016, i * 16); for (const c of v.charts) c.draw(true); }, v.id);

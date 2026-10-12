@@ -206,7 +206,9 @@ export function buildTimeline(ctx) {
       const f = (n, d = 0) => (Number.isFinite(n) ? n.toFixed(d) : '–');
       const rel = S.cursor - latest;
       // gear comes from the nearest sample: gear codes are not interpolated
-      const gear = store.hello ? gearLabel(store.hello.lab, tl.get(tl.indexAtTime(S.cursor), 'Gear'), '–') : '–';
+      const code = tl.get(tl.indexAtTime(S.cursor), 'Gear');
+      const lab = store.hello && store.hello.lab;
+      const gear = !lab ? '–' : code === (lab.neutral ? lab.neutral.code : 11) ? 'N' : gearLabel(lab, code, '–');
       setReadout(
         `${rel >= -0.05 ? 'now' : rel.toFixed(1) + ' s'}   ` +
         `${f(conv.speed(v('SpeedKmh'), u))} ${label.speed(u)}   ${f(v('CurrentEngineRpm'))} rpm   gear ${gear}   ` +

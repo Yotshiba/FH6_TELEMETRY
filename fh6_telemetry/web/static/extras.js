@@ -1,4 +1,4 @@
-// Extras: file export (CSV, share card), keep-screen-awake, and the Konami easter egg.
+// Extras: file export (CSV, share card), keep-screen-awake (see awake.js), and the Konami easter egg.
 
 import { colors, heat } from './theme.js';
 import { conv, fmt, label } from './units.js';
@@ -85,51 +85,8 @@ export async function exportShareCard({ analytics, lifetime, settings, trail }) 
   await new Promise((res) => cv.toBlob((b) => { if (b) downloadBlob(`fh6-session-${stamp()}.png`, b); res(); }, 'image/png'));
 }
 
-/** Best-effort "keep the screen on": Wake Lock where allowed, else a muted canvas-stream video. */
-export class KeepAwake {
-  constructor() { this.lock = null; this.video = null; this.tick = null; this.on = false; }
-
-  async enable() {
-    this.on = true;
-    this._dropVideo();                                 // idempotent: never stack a second fallback video / timer
-    try {
-      if ('wakeLock' in navigator) { this.lock = await navigator.wakeLock.request('screen'); return 'wakelock'; }
-    } catch { /* not a secure context / denied: fall through */ }
-    let v = null, tick = null;
-    try {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 16;
-      const cx = cv.getContext('2d');
-      v = document.createElement('video');
-      v.muted = true; v.loop = true; v.setAttribute('playsinline', '');
-      v.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none';
-      v.srcObject = cv.captureStream(5);
-      document.body.appendChild(v);
-      tick = setInterval(() => { cx.fillStyle = Math.random() < 0.5 ? '#000' : '#010101'; cx.fillRect(0, 0, 16, 16); }, 1000);
-      await v.play();
-      this.video = v; this.tick = tick;
-      return 'video';
-    } catch {
-      clearInterval(tick);                             // play() was refused: leave nothing behind
-      if (v) v.remove();
-      return 'unsupported';
-    }
-  }
-
-  _dropVideo() {
-    clearInterval(this.tick); this.tick = null;
-    if (this.video) { this.video.pause(); this.video.remove(); this.video = null; }
-  }
-
-  async disable() {
-    this.on = false;
-    try { if (this.lock) await this.lock.release(); } catch { /* ignore */ }
-    this.lock = null;
-    this._dropVideo();
-  }
-
-  /** The browser drops a wake lock when the tab is hidden: take it again on return. */
-  reacquire() { if (this.on && !this.lock && !this.video) this.enable(); else if (this.on && 'wakeLock' in navigator && !this.video) this.enable(); }
-}
+// Keep-screen-awake lives in awake.js (re-exported here for the existing imports).
+export { KeepAwake, describeAwake } from './awake.js';
 
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
 

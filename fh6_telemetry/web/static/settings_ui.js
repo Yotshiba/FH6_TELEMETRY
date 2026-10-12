@@ -117,9 +117,9 @@ export function buildDrawer(root, ctx) {
   // ---- screen ---------------------------------------------------------------------------------------------------------------------------
   const sc = section('Screen');
   toggle('mirror', 'Mirror cockpit (windshield HUD)', sc);
-  toggle('keepAwake', 'Keep screen on (experimental)', sc, 'Wake Lock needs HTTPS; otherwise a tiny hidden video is used');
+  toggle('keepAwake', 'Keep screen on (no sleep / screen saver)', sc, 'Uses the Wake Lock API, or a tiny hidden video over plain http://. Phones need one tap first.');
   if (document.fullscreenEnabled) button(sc, '⛶ Toggle fullscreen', () => actions.fullscreen());
-  sc.appendChild(h('div', 'dr-note', 'Over plain http:// a phone may still dim its screen; raise the device\'s auto-lock time if it does.'));
+  sc.appendChild(h('div', 'dr-note', 'If the ☀ button in the top bar stays orange, this browser refused: set the device\'s auto-lock / screen saver to Never.'));
 
   // ---- data ---------------------------------------------------------------------------------------------------------------------------------
   const da = section('Data');

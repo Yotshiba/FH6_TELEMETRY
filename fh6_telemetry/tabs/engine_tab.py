@@ -14,8 +14,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..constants import GEAR_MAP
 from ..core.charts import CHARTS
+from ..core.derive import GearDisplay
 from ..widgets.rolling_chart import RollingChart
 
 
@@ -27,6 +27,7 @@ class EngineTab(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._gear = GearDisplay()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -103,8 +104,7 @@ class EngineTab(QWidget):
         torque  = t.get("Torque", 0.0)
         boost   = t.get("Boost", 0.0) * 0.0689476
         fuel    = t.get("Fuel", 0.0) * 100.0
-        _gv     = t.get("Gear", 0)
-        gear    = GEAR_MAP.get(_gv, str(_gv))
+        gear    = self._gear.update(t.get("Gear", 0), t.get("TimestampMS"))
 
         self._rpm_val.setText(f"{rpm:.0f}")
         self._maxrpm_val.setText(f"{max_rpm:.0f}")

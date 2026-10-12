@@ -10,6 +10,9 @@ body { display: block; }
   background: var(--panel); color: var(--dim); font-size: 18px; line-height: 1; cursor: pointer;
 }
 .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+#btn-awake { margin-right: 6px; }
+#btn-awake.on { color: var(--yellow); border-color: var(--yellow); box-shadow: 0 0 10px color-mix(in srgb, var(--yellow) 45%, transparent); }
+#btn-awake.warn { color: var(--amber); border-color: var(--amber); animation: pulse 1.4s infinite; }
 
 .chip {
   padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel);

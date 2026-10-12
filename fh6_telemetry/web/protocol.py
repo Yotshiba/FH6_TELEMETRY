@@ -36,6 +36,8 @@ from ..constants import (
     DRIVETRAIN,
     GEAR_MAP,
     HISTORY_LEN,
+    NEUTRAL_GEAR_CODE,
+    NEUTRAL_HOLD_MS,
     WHEEL_COLORS,
     WHEELS,
 )
@@ -197,6 +199,7 @@ def static_ui() -> dict:
 def lookups() -> dict:
     return {
         "gear": {str(k): v for k, v in GEAR_MAP.items()},
+        "neutral": {"code": NEUTRAL_GEAR_CODE, "holdMs": NEUTRAL_HOLD_MS},
         "cls": {str(k): v for k, v in CAR_CLASS.items()},
         "drv": {str(k): v for k, v in DRIVETRAIN.items()},
         "grp": {str(k): v for k, v in CAR_GROUP_MAP.items()},

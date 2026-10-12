@@ -29,7 +29,7 @@ export function defaults() {
     fx: { speedlines: true, vignette: true, shake: false, confetti: true },
     shift: { ...DEFAULT_SHIFT },
     mirror: false,
-    keepAwake: false,
+    keepAwake: true,                 // a dash that goes to sleep is no dash
   };
 }
 

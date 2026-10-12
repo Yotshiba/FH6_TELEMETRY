@@ -101,7 +101,8 @@ def test_hello_describes_the_columns_charts_and_ui_constants():
     for c in h["charts"]:
         for line in c["lines"]:
             assert h["F"][line["k"]]["k"] in CHARTS[c["id"]].channels
-    assert h["lab"]["gear"]["2"] == "1" and h["lab"]["cls"]["3"] == "A"
+    assert h["lab"]["gear"]["0"] == "R" and h["lab"]["gear"]["1"] == "1" and h["lab"]["gear"]["6"] == "6"   # 1-based
+    assert h["lab"]["neutral"] == {"code": 11, "holdMs": 250} and h["lab"]["cls"]["3"] == "A"
     assert h["ui"]["temp"][0] == [50.0, "#1a6fb5"] and h["ui"]["wheel"]["FL"] == "#FF4444"
     assert any(b["label"] == "Fuel" and b["invert"] for b in h["ui"]["inputs"])
     assert h["rg"] == {"tyre_temp": [0, 120]}
